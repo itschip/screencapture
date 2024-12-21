@@ -1,17 +1,17 @@
 import { createGameView } from '@screencapture/gameview';
 
-type Encoding = "webp" | "jpg" | "png"
+type Encoding = 'webp' | 'jpg' | 'png';
 
 type CaptureRequest = {
   action: 'capture';
   url: string;
-  encoding: Encoding
+  encoding: Encoding;
   quality: number;
   headers: Headers;
-  uploadToken: string, 
+  uploadToken: string;
   serverEndpoint: string;
   formField: string;
-  dataType: 'blob' | 'base64'
+  dataType: 'blob' | 'base64';
 };
 
 export class Capture {
@@ -23,7 +23,11 @@ export class Capture {
       const data = event.data as CaptureRequest;
 
       if (data.action === 'capture') {
+        const start = Date.now();
         await this.captureScreen(data);
+        const end = Date.now(); // End time
+
+        console.log(`Duration of captureScreen: ${end - start}ms`);
       }
     });
 
@@ -41,12 +45,13 @@ export class Capture {
 
     this.#gameView = createGameView(this.#canvas);
 
+    const enc = request.encoding ?? 'png';
+    const qlty = request.quality ?? 0.5;
     let imageData: string | Blob;
     if (request.serverEndpoint || !request.formField) {
-      imageData = await this.createDataURL(this.#canvas);
+      // make sure we don't care about serverEndpoint, only the dataType
+      imageData = await this.createBlob(this.#canvas, enc, qlty);
     } else {
-      const enc = request.encoding ?? "webp"
-      const qlty = request.quality ?? 0.5
       imageData = await this.createBlob(this.#canvas, enc, qlty);
     }
 
@@ -57,15 +62,14 @@ export class Capture {
   }
 
   async httpUploadImage(request: CaptureRequest, imageData: string | Blob) {
-    const reqBody = this.createRequestBody(request, imageData)
+    const reqBody = this.createRequestBody(request, imageData);
 
     if (request.serverEndpoint) {
       try {
         await fetch(request.serverEndpoint, {
           method: 'POST',
           headers: {
-            "X-ScreenCapture-Token": request.uploadToken,
-            "Content-Type": "application/json"
+            'X-ScreenCapture-Token': request.uploadToken,
           },
           body: reqBody,
         });
@@ -78,10 +82,10 @@ export class Capture {
   createRequestBody(request: CaptureRequest, imageData: string | Blob): BodyInit {
     if (imageData instanceof Blob) {
       const formData = new FormData();
-      formData.append(request.formField, imageData);
+      formData.append(request.formField ?? 'file', imageData);
       return formData;
     }
-    
+
     // dataType is just here in order to know what to do with the data when we get it back
     return JSON.stringify({ imageData: imageData, dataType: request.dataType });
   }
@@ -98,6 +102,8 @@ export class Capture {
   }
 
   createBlob(canvas: HTMLCanvasElement, enc: Encoding, quality = 0.7): Promise<Blob> {
+    console.log('creating blob');
+    console.log('enc: ' + enc);
     return new Promise((resolve, reject) => {
       canvas.toBlob(
         (blob) => {
