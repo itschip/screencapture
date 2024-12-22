@@ -23,12 +23,10 @@ export function parseFormData(buffer: Buffer, boundary: string): Record<string, 
         const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
         const name = nameMatch ? nameMatch[1] : undefined;
   
-        // Combine body lines in case of multi-line body
         const body = rawBody.join('\r\n\r\n').trim();
   
         if (name) {
           if (filenameMatch) {
-            // Handle file uploads
             const filename = filenameMatch[1];
             const fileContentStartIndex = buffer.indexOf('\r\n\r\n', buffer.indexOf(rawHeaders)) + 4;
             const fileContentEndIndex = buffer.indexOf(boundaryDelimiter, fileContentStartIndex) - 2;
@@ -36,7 +34,6 @@ export function parseFormData(buffer: Buffer, boundary: string): Record<string, 
   
             parsedData[name] = { filename, content: fileBuffer };
           } else {
-            // Handle regular fields
             parsedData[name] = body;
           }
         }
@@ -45,4 +42,3 @@ export function parseFormData(buffer: Buffer, boundary: string): Record<string, 
   
     return parsedData;
   }
-  
