@@ -7,6 +7,7 @@ import { setHttpCallback } from '@citizenfx/http-wrapper';
 
 import FormData from 'form-data';
 import fetch from 'node-fetch';
+import { Blob } from 'node:buffer';
 import { CaptureOptions, DataType } from './types';
 import { UploadStore } from './upload-store';
 
