@@ -20,6 +20,11 @@ type CaptureRequest = {
   maxHeight?: number;
 };
 
+function log(...args: any[]) {
+  if (import.meta.env.MODE === 'production') return
+  log(...args);
+}
+
 export class Capture {
   #gameView: any;
   #canvas: HTMLCanvasElement | null = null;
@@ -73,7 +78,7 @@ export class Capture {
     this.#canvas.width = width;
     this.#canvas.height = height;
 
-    console.log(`Capturing at ${width}x${height} (original: ${window.innerWidth}x${window.innerHeight})`);
+    log(`Capturing at ${width}x${height} (original: ${window.innerWidth}x${window.innerHeight})`);
 
     this.#gameView = createGameView(this.#canvas);
 
@@ -173,12 +178,12 @@ export class Capture {
         }
       }
 
-      console.log(`Using quality ${quality} for ${canvas.width}x${canvas.height} (${pixelCount} pixels)`);
+      log(`Using quality ${quality} for ${canvas.width}x${canvas.height} (${pixelCount} pixels)`);
 
       canvas.toBlob(
         (blob) => {
           if (blob) {
-            console.log(`Generated blob: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+            log(`Generated blob: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
             resolve(blob);
           } else {
             reject('No blob available');
