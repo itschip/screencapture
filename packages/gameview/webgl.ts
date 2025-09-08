@@ -141,14 +141,32 @@ export function createGameView(canvas: HTMLCanvasElement) {
 		canvas,
 		gl,
 		animationFrame: void 0,
+		disposed: false,
 		resize: (width: number, height: number) => {
+			if (gameView.disposed) return;
 			gl.viewport(0, 0, width, height);
 			gl.canvas.width = width;
 			gl.canvas.height = height;
 		},
+		dispose: () => {
+			if (gameView.disposed) return;
+			gameView.disposed = true;
+			if (gameView.animationFrame) {
+				cancelAnimationFrame(gameView.animationFrame);
+				gameView.animationFrame = void 0;
+			}
+			const ext = gl.getExtension('WEBGL_lose_context');
+			if (ext) {
+				ext.loseContext();
+			}
+			if (canvas.parentNode) {
+				canvas.parentNode.removeChild(canvas);
+			}
+		},
 	};
 
 	render = () => {
+		if (gameView.disposed) return;
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 		gl.finish();
 

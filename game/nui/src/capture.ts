@@ -93,7 +93,10 @@ export class Capture {
     if (!imageData) return console.error('No image available');
 
     await this.httpUploadImage(request, imageData);
+    this.#gameView.dispose();
     this.#canvas.remove();
+    this.#gameView = null;
+    this.#canvas = null;
   }
 
   async httpUploadImage(request: CaptureRequest, imageData: string | Blob) {
