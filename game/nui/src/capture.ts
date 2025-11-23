@@ -33,6 +33,11 @@ export class Capture {
   private readonly MAX_HEIGHT = 1080;
 
   start() {
+    // Initialize gameView once
+    this.#canvas = document.createElement('canvas');
+    document.body.appendChild(this.#canvas);
+    this.#gameView = createGameView(this.#canvas);
+
     window.addEventListener('message', async (event) => {
       const data = event.data as CaptureRequest;
 
@@ -81,15 +86,16 @@ export class Capture {
     log(`Capturing at ${width}x${height} (original: ${window.innerWidth}x${window.innerHeight})`);
 
     this.#gameView = createGameView(this.#canvas);
-
-
     this.#gameView.resize(width, height);
+
+    // stupid fix for black images
+    await this.waitForFrames(3);
 
     const enc = request.encoding ?? 'png';
     let imageData: string | Blob;
     // callbackUrl is only used for screenshot-basic requestScreenshot export
     // everything else will be processed by server-side code
-    if (request.callbackUrl) { 
+    if (request.callbackUrl) {
       imageData = await this.createDataURL(this.#canvas, enc, request.quality);
     } else {
       imageData = await this.createBlob(this.#canvas, enc, request.quality);
@@ -192,6 +198,21 @@ export class Capture {
         `image/${enc}`,
         quality,
       );
+    });
+  }
+
+  private waitForFrames(count: number): Promise<void> {
+    return new Promise((resolve) => {
+      let framesWaited = 0;
+      const waitFrame = () => {
+        framesWaited++;
+        if (framesWaited >= count) {
+          resolve();
+        } else {
+          requestAnimationFrame(waitFrame);
+        }
+      };
+      requestAnimationFrame(waitFrame);
     });
   }
 }
