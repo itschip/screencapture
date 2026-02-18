@@ -125,17 +125,17 @@ function createImageCaptureMessage(options: CaptureRequest) {
   });
 }
 
-/* onNet("screencapture:captureStream", (token: string, options: object) => {
+onNet("screencapture:captureStream", (token: string, options: object) => {
   SendNUIMessage({
     ...options,
     uploadToken: token,
     action: 'capture-stream-start',
     serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/stream`,
   });
-}) */
+})
 
-/* onNet("screencapture:INTERNAL:stopCaptureStream", () => {
+onNet("screencapture:INTERNAL:stopCaptureStream", () => {
   SendNUIMessage({
     action: 'capture-stream-stop',
   })
-}) */
+})

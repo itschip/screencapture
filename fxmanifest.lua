@@ -4,6 +4,13 @@ version '0.9.2'
 
 game "gta5"
 
+node_version '22'
+
+dependencies {
+    '/server:25988',
+    '/onesync',
+}
+
 client_script "game/dist/client.js"
 server_script "game/dist/server.js"
 

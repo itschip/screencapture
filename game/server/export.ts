@@ -2,8 +2,8 @@ import { uploadStore } from './bootstrap';
 import { CallbackFn, CaptureOptions, DataType, ScreenshotBasicCallbackFn, createScreenshotBasicUploadData, createRegularUploadData } from './types';
 import { exportHandler } from './utils';
 
-/* global.exports("serverCaptureStream", (source: number) => {
-  const token = router.addStream({
+global.exports("serverCaptureStream", (source: number) => {
+  const token = uploadStore.addStream({
     callback: null,
     isRemote: false,
     remoteConfig: null,
@@ -15,7 +15,7 @@ import { exportHandler } from './utils';
 // DO NOT USE
 global.exports("INTERNAL_stopServerCaptureStream", (source: number) => {
   emitNet("screencapture:INTERNAL:stopCaptureStream", source)
-}) */
+})
 
 // upload the file from the server and return the raw response
 global.exports(

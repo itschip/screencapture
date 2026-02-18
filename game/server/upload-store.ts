@@ -1,13 +1,19 @@
 import { nanoid } from 'nanoid';
-import { UploadData } from './types';
+import { StreamUploadData, UploadData } from './types';
 
 export class UploadStore {
   #uploadMap: Map<string, UploadData>;
-  //#streamUploadMap: Map<string, StreamUploadData>;
+  #streamUploadMap: Map<string, StreamUploadData>;
 
   constructor() {
     this.#uploadMap = new Map<string, UploadData>();
-    //this.#streamUploadMap = new Map<string, StreamUploadData>();
+    this.#streamUploadMap = new Map<string, StreamUploadData>();
+  }
+
+  addStream(params: StreamUploadData): string {
+    const streamToken = nanoid(24);
+    this.#streamUploadMap.set(streamToken, params);
+    return streamToken;
   }
 
   addUpload(params: UploadData): string {
