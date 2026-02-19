@@ -124,12 +124,9 @@ export class Capture {
 
     if (request.serverEndpoint) {
       try {
-        await fetch(request.serverEndpoint, {
+        await fetch(`${request.serverEndpoint}/${request.uploadToken}`, {
           method: 'POST',
           mode: 'cors',
-          headers: {
-            'X-ScreenCapture-Token': request.uploadToken,
-          },
           body: reqBody,
         });
       } catch (err) {

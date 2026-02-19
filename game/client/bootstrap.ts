@@ -13,7 +13,7 @@ onNet('screencapture:captureScreen', (token: string, options: object, dataType: 
     uploadToken: token,
     dataType,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/image`,
+    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
   });
 });
 
@@ -121,7 +121,7 @@ function createImageCaptureMessage(options: CaptureRequest) {
   SendNUIMessage({
     ...options,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/image`,
+    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
   });
 }
 

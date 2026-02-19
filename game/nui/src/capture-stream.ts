@@ -99,12 +99,9 @@ export class CaptureStream {
 
     try {
       // Fetch without setting 'Content-Type' manually
-      const response = await fetch(request.serverEndpoint, {
+      const response = await fetch(`${request.serverEndpoint}/${request.uploadToken}`, {
         method: 'POST',
-        headers: {
-          'X-ScreenCapture-Token': request.uploadToken, // Add custom headers
-        },
-        body: formData, // Browser handles Content-Type
+        body: formData,
       });
 
       if (!response.ok) {
