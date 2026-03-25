@@ -69,13 +69,21 @@ onNet('screencapture:PerformUploadProxy', async (token: string, base64Data: stri
       if (screenshotBasicCompatibility) {
         (callback as any)(err.message, null);
       } else {
-        (callback as any)(err);
+        if (playerSource && correlationId) {
+          (callback as any)(JSON.stringify({ error: err.message }), playerSource, correlationId);
+        } else {
+          (callback as any)(JSON.stringify({ error: err.message }));
+        }
       }
     } else {
       if (screenshotBasicCompatibility) {
         (callback as any)('An unknown error occurred', null);
       } else {
-        (callback as any)(new Error('An unknown error occurred'));
+        if (playerSource && correlationId) {
+          (callback as any)(JSON.stringify({ error: 'An unknown error occurred' }), playerSource, correlationId);
+        } else {
+          (callback as any)(JSON.stringify({ error: 'An unknown error occurred' }));
+        }
       }
     }
   }

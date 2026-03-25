@@ -177,7 +177,10 @@ function createRequestBody(
 
     if (dataType === 'blob') {
       const formData = new FormData();
-      formData.append(formField || 'file', buf, filenameExt);
+      formData.append(formField || 'file', buf, {
+        filename: filenameExt,
+        knownLength: (buf as Buffer).length,
+      });
       if (filename) {
         formData.append('filename', filename);
       }
