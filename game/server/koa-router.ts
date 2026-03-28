@@ -1,6 +1,6 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import { writeFileSync} from 'fs';
+import { writeFileSync } from 'fs';
 
 // @ts-ignore - no types
 import { setHttpCallback } from '@citizenfx/http-wrapper';
@@ -21,6 +21,18 @@ declare function GetCurrentResourceName(): string;
 export async function createServer(uploadStore: UploadStore) {
   const app = new Koa();
   const router = new Router();
+
+  app.use(async (ctx, next) => {
+    ctx.set('Access-Control-Allow-Origin', '*');
+    ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    ctx.set('Access-Control-Allow-Headers', '*');
+
+    if (ctx.method === 'OPTIONS') {
+      ctx.status = 204;
+      return;
+    }
+    await next();
+  });
 
   router.post('/upload/:token', upload.single('file') as any, async (ctx) => {
     const token = ctx.params['token'] as string;
@@ -83,7 +95,7 @@ export async function createServer(uploadStore: UploadStore) {
         } else {
           (callback as any)(err);
         }
-        
+
         ctx.status = 500;
         ctx.body = { status: 'error', message: err.message };
       } else {
@@ -92,7 +104,7 @@ export async function createServer(uploadStore: UploadStore) {
         } else {
           (callback as any)(new Error('An unknown error occurred'));
         }
-        
+
         ctx.status = 500;
         ctx.body = { status: 'error', message: 'An unknown error occurred' };
       }
@@ -106,7 +118,7 @@ export async function createServer(uploadStore: UploadStore) {
   setHttpCallback(app.callback());
 }
 
-async function uploadFile(
+export async function uploadFile(
   url: string | undefined,
   config: CaptureOptions | null,
   buf: string | Buffer,
@@ -165,7 +177,10 @@ function createRequestBody(
 
     if (dataType === 'blob') {
       const formData = new FormData();
-      formData.append(formField || 'file', buf, filenameExt);
+      formData.append(formField || 'file', buf, {
+        filename: filenameExt,
+        knownLength: (buf as Buffer).length,
+      });
       if (filename) {
         formData.append('filename', filename);
       }
@@ -181,7 +196,7 @@ function createRequestBody(
   });
 }
 
-async function buffer(dataType: DataType, imageData: Buffer, encoding: string = 'webp'): Promise<string | Buffer> {
+export async function buffer(dataType: DataType, imageData: Buffer, encoding: string = 'webp'): Promise<string | Buffer> {
   return new Promise(async (resolve, reject) => {
     if (dataType === 'base64') {
       // i just want to give a big shoutout to CFX for making node22 so fucking shit
@@ -195,6 +210,14 @@ async function buffer(dataType: DataType, imageData: Buffer, encoding: string = 
   });
 }
 
+export function base64ToBuffer(data: string): Buffer {
+  const matches = data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (matches && matches[2]) {
+    return Buffer.from(matches[2], 'base64');
+  }
+  return Buffer.from(data, 'base64');
+}
+
 async function blobToBase64(blob: Blob, encoding: string = 'webp'): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
@@ -202,7 +225,7 @@ async function blobToBase64(blob: Blob, encoding: string = 'webp'): Promise<stri
       const base64 = Buffer.from(arrayBuffer).toString('base64');
 
       const mimeType = getMimeType(encoding);
-      
+
       resolve(`data:${mimeType};base64,${base64}`);
     } catch (err) {
       reject(err);

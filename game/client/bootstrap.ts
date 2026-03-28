@@ -4,8 +4,10 @@ import { CaptureRequest, RequestScreenshotUploadCB, ScreenshotCreatedBody } from
 import { exportHandler, uuidv4 } from './utils';
 
 const clientCaptureMap = new Map<string, RequestScreenshotUploadCB>();
+const clientUploadTokenMap = new Map<string, string>();
 
 RegisterNuiCallbackType('screenshot_created');
+RegisterNuiCallbackType('screenshot_upload_proxy');
 
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
   SendNUIMessage({
@@ -39,6 +41,18 @@ on('__cfx_nui:screenshot_created', (body: ScreenshotCreatedBody, cb: (arg: any) 
   }
 });
 
+on('__cfx_nui:screenshot_upload_proxy', (body: any, cb: (arg: any) => void) => {
+  cb(true);
+
+  if (body.id !== undefined && clientUploadTokenMap.has(body.id)) {
+    const token = clientUploadTokenMap.get(body.id);
+    if (token && body.data) {
+      TriggerLatentServerEvent('screencapture:PerformUploadProxy', 500000, token, body.data);
+    }
+    clientUploadTokenMap.delete(body.id);
+  }
+});
+
 async function requestScreenshotUpload(
   url: string,
   formField: string,
@@ -68,12 +82,16 @@ async function requestScreenshotUpload(
     return console.error('Failed to get upload token');
   }
 
+  clientUploadTokenMap.set(correlationId, token);
+
   return createImageCaptureMessage({
     ...realOptions,
     formField,
     url,
     uploadToken: token,
-    dataType: 'blob',
+    dataType: 'base64',
+    correlationId,
+    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_upload_proxy`,
   });
 }
 
@@ -107,7 +125,7 @@ function requestScreenshot(options: CaptureRequest, callback: RequestScreenshotU
 
   createImageCaptureMessage({
     ...realOptions,
-    callbackUrl: `http://${GetCurrentResourceName()}/screenshot_created`,
+    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_created`,
     correlationId,
   });
 }

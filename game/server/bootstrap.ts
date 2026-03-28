@@ -41,3 +41,50 @@ eventController<RequestUploadToken, string>(
     return send(token);
   },
 );
+
+import { uploadFile, base64ToBuffer } from './koa-router';
+
+onNet('screencapture:PerformUploadProxy', async (token: string, base64Data: string) => {
+  const uploadData = uploadStore.getUpload(token);
+  if (!uploadData) return;
+
+  const { callback, url, remoteConfig, dataType, screenshotBasicCompatibility, playerSource, correlationId } = uploadData;
+
+  try {
+    const rawBuffer = base64ToBuffer(base64Data);
+
+    const response = await uploadFile(url, remoteConfig, rawBuffer, 'blob'); // pass blob so createRequestBody creates FormData
+
+    if (screenshotBasicCompatibility) {
+      (callback as any)(false, response);
+    } else {
+      if (playerSource && correlationId) {
+        (callback as any)(response, playerSource, correlationId);
+      } else {
+        (callback as any)(response);
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error) {
+      if (screenshotBasicCompatibility) {
+        (callback as any)(err.message, null);
+      } else {
+        if (playerSource && correlationId) {
+          (callback as any)(JSON.stringify({ error: err.message }), playerSource, correlationId);
+        } else {
+          (callback as any)(JSON.stringify({ error: err.message }));
+        }
+      }
+    } else {
+      if (screenshotBasicCompatibility) {
+        (callback as any)('An unknown error occurred', null);
+      } else {
+        if (playerSource && correlationId) {
+          (callback as any)(JSON.stringify({ error: 'An unknown error occurred' }), playerSource, correlationId);
+        } else {
+          (callback as any)(JSON.stringify({ error: 'An unknown error occurred' }));
+        }
+      }
+    }
+  }
+});
