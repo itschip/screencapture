@@ -1,4 +1,3 @@
-import { request } from 'http';
 import { netEventController } from './event';
 import { CaptureRequest, RequestScreenshotUploadCB, ScreenshotCreatedBody } from './types';
 import { exportHandler, uuidv4 } from './utils';
@@ -15,7 +14,7 @@ onNet('screencapture:captureScreen', (token: string, options: object, dataType: 
     uploadToken: token,
     dataType,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
+    serverEndpoint: `https://${GetCurrentResourceName()}/upload`,
   });
 });
 
@@ -139,7 +138,7 @@ function createImageCaptureMessage(options: CaptureRequest) {
   SendNUIMessage({
     ...options,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
+    serverEndpoint: `https://${GetCurrentResourceName()}/upload`,
   });
 }
 
@@ -148,7 +147,7 @@ onNet("screencapture:captureStream", (token: string, options: object) => {
     ...options,
     uploadToken: token,
     action: 'capture-stream-start',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/stream`,
+    serverEndpoint: `https://${GetCurrentResourceName()}/stream`,
   });
 })
 
