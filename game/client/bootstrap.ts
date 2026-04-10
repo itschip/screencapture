@@ -9,13 +9,17 @@ const clientUploadTokenMap = new Map<string, string>();
 RegisterNuiCallbackType('screenshot_created');
 RegisterNuiCallbackType('screenshot_upload_proxy');
 
+const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
+const serverEndpoint = `${protocol}://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
+
+
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
   SendNUIMessage({
     ...options,
     uploadToken: token,
     dataType,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
+    serverEndpoint: `${serverEndpoint}/upload`,
   });
 });
 
@@ -91,7 +95,7 @@ async function requestScreenshotUpload(
     uploadToken: token,
     dataType: 'base64',
     correlationId,
-    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_upload_proxy`,
+    callbackUrl: `${serverEndpoint}/screenshot_upload_proxy`,
   });
 }
 
@@ -125,7 +129,7 @@ function requestScreenshot(options: CaptureRequest, callback: RequestScreenshotU
 
   createImageCaptureMessage({
     ...realOptions,
-    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_created`,
+    callbackUrl: `${serverEndpoint}/screenshot_created`,
     correlationId,
   });
 }
@@ -139,7 +143,7 @@ function createImageCaptureMessage(options: CaptureRequest) {
   SendNUIMessage({
     ...options,
     action: 'capture',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/upload`,
+    serverEndpoint: `${serverEndpoint}/upload`,
   });
 }
 
@@ -148,7 +152,7 @@ onNet("screencapture:captureStream", (token: string, options: object) => {
     ...options,
     uploadToken: token,
     action: 'capture-stream-start',
-    serverEndpoint: `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}/stream`,
+    serverEndpoint: `${serverEndpoint}/stream`,
   });
 })
 
