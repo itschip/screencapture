@@ -13,7 +13,9 @@ export interface UploadData {
   screenshotBasicCompatibility?: boolean;
 }
 
-export function createScreenshotBasicUploadData(params: Omit<UploadData, 'callback' | 'screenshotBasicCompatibility'> & { callback: ScreenshotBasicCallbackFn }): UploadData {
+export function createScreenshotBasicUploadData(
+  params: Omit<UploadData, 'callback' | 'screenshotBasicCompatibility'> & { callback: ScreenshotBasicCallbackFn },
+): UploadData {
   return {
     ...params,
     callback: params.callback,
@@ -21,7 +23,9 @@ export function createScreenshotBasicUploadData(params: Omit<UploadData, 'callba
   };
 }
 
-export function createRegularUploadData(params: Omit<UploadData, 'callback' | 'screenshotBasicCompatibility'> & { callback: CallbackFn }): UploadData {
+export function createRegularUploadData(
+  params: Omit<UploadData, 'callback' | 'screenshotBasicCompatibility'> & { callback: CallbackFn },
+): UploadData {
   return {
     ...params,
     callback: params.callback,
@@ -30,11 +34,32 @@ export function createRegularUploadData(params: Omit<UploadData, 'callback' | 's
 }
 
 export interface StreamUploadData {
-  callback: CallbackFn | null
+  source: number;
+  tempFilePath: string;
+  bytesReceived: number;
+  callback: CallbackFn;
   isRemote: boolean;
-  remoteConfig: CaptureOptions | null;
-  url?: string;
+  remoteUrl?: string;
+  remoteConfig?: StreamRemoteConfig;
 }
+
+// Remote upload config specific to video streams.
+export interface StreamRemoteConfig {
+  headers?: HeadersInit;
+  formField?: string; // defaults to 'file'
+  filename?: string; // becomes <filename>.webm — defaults to 'recording'
+}
+
+// Parameters accepted by UploadStore.addStream() — tempFilePath is derived
+// from the generated token so it is not provided by the caller.
+export type AddStreamParams = {
+  source: number;
+  tempDir: string;
+  callback: CallbackFn;
+  isRemote?: boolean;
+  remoteUrl?: string;
+  remoteConfig?: StreamRemoteConfig;
+};
 
 export interface RemoteConfig {
   url: string;
@@ -48,7 +73,7 @@ export interface CaptureOptions {
   headers?: HeadersInit;
   formField?: string;
   filename?: string;
-  // fuck me, but needed for screenshot-basic stuffies -- delete later :)
+  // screenshot-basic compatibility alias for filename
   fileName?: string;
   encoding?: string;
   maxWidth?: number;
@@ -58,7 +83,7 @@ export interface CaptureOptions {
 export type CallbackFn = (data: unknown, _playerSource?: number, correlationId?: string) => void;
 export type ScreenshotBasicCallbackFn = (err: string | boolean, data: string) => void;
 
-export interface CallbackData { 
+export interface CallbackData {
   imageData: string | Buffer<ArrayBuffer>;
   dataType: string;
 }

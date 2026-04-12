@@ -17,4 +17,4 @@ files {
 
 provide 'screenshot-basic'
 
-protocol 'https' -- should be http for local development
+protocol 'http' -- should be http for local development

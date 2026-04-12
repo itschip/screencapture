@@ -1,181 +1,230 @@
 # ScreenCapture
 
-ScreenCapture is a resource being built as a replacement for screenshot-basic in FiveM.
+A FiveM resource for capturing screenshots and recording videos from a player's game view, built as a modern replacement for screenshot-basic.
 
-## Why build something new?
+---
 
-I'll explain this later, but briefly - Screenshot-Basic is no longer maintained, has it's issues. It's a nightmare for almost everyone to get up and running for some reason (blame FXServer yarn) and it's not up-to-date with anything.
+## Screenshots
 
-## How to use
+### `serverCapture` — server-side export
 
-You can use the server-side exports, or the `screenshot-basic` backwards compatiable client-export: `requestScreenshotUpload`.
+Captures a screenshot for a player and returns the image data to your callback.
 
-### JavaScript / TypeScript
-
-Converting Base64 to Blob/Buffer is easy enough with Node, but Lua ScRT in FiveM doesn't really offer that functionality, so if you wish to use the `serverCapture` export, you'll need to use Base64. More on that later.
-
-### serverCapture (server-side export)
-
-| Parameter  | Type                     | Description                                                               |
-| ---------- | ------------------------ | ------------------------------------------------------------------------- |
-| `source`   | string                   | Player to capture                                                         |
-| `options`  | object/table             | Configuration options for the capture                                     |
-| `callback` | function                 | A function invoked with the captured data                                 |
-| `dataType` | string (default: base64) | What data should be returned through the callback: `'base64'` or `'blob'` |
+| Parameter  | Type                   | Description                                                    |
+| ---------- | ---------------------- | -------------------------------------------------------------- |
+| `source`   | `number`               | Player source to capture                                       |
+| `options`  | `object`               | Capture options (see below)                                    |
+| `callback` | `function`             | Called with the captured image data                            |
+| `dataType` | `'base64'` \| `'blob'` | Format of the data passed to the callback. Default: `'base64'` |
 
 #### Options
 
-The `options` argument accepts an object with the following fields:
+| Field       | Type     | Default  | Description                                          |
+| ----------- | -------- | -------- | ---------------------------------------------------- |
+| `encoding`  | `string` | `'webp'` | Image encoding format: `'webp'`, `'jpg'`, or `'png'` |
+| `maxWidth`  | `number` | `1920`   | Maximum capture width in pixels                      |
+| `maxHeight` | `number` | `1080`   | Maximum capture height in pixels                     |
 
-| Field       | Type           | Default  | Description                                                               |
-| ----------- | -------------- | -------- | ------------------------------------------------------------------------- |
-| `headers`   | `object/table` | `null`   | Optional HTTP headers to include in the capture request.                  |
-| `formField` | `string`       | `null`   | The form field name to be used when uploading the captured data.          |
-| `filename`  | `string`       | `null`   | Specifies the name of the file when saving or transmitting captured data. |
-| `encoding`  | `string`       | `'webp'` | Specifies the encoding format for the captured image (e.g., `'webp'`).    |
+```lua
+exports.screencapture:serverCapture(source, { encoding = 'webp' }, function(data)
+    -- data is a base64 data URI string
+    print(data)
+end)
+```
 
 ```ts
-RegisterCommand(
-  'capture',
-  (_: string, args: string[]) => {
-    exp.screencapture.serverCapture(
-      args[0],
-      { encoding: 'webp' },
-      (data: string | Buffer<ArrayBuffer>) => {
-        data = Buffer.from(data as ArrayBuffer);
-
-        fs.writeFileSync('./blob_image.webp', data);
-        console.log(`File saved`);
-      },
-      'blob',
-    );
+exports.screencapture.serverCapture(
+  source,
+  { encoding: 'webp' },
+  (data: Buffer) => {
+    fs.writeFileSync('./screenshot.webp', data);
   },
-  false,
+  'blob',
 );
 ```
 
-### remoteUpload (server-side export)
+---
 
-| Parameter  | Type                     | Description                                                              |
-| ---------- | ------------------------ | ------------------------------------------------------------------------ |
-| `source`   | string                   | Player to capture                                                        |
-| `url`      | string                   | The upload URL                                                           |
-| `options`  | object/table             | Configuration options for the capture                                    |
-| `callback` | function                 | Callback returning the HTTP response in JSON                             |
-| `dataType` | string (default: base64) | What data type should be used to upload the file: `'base64'` or `'blob'` |
+### `remoteUpload` — server-side export
+
+Captures a screenshot and uploads it directly to a remote URL. The callback receives the remote API's JSON response.
+
+| Parameter  | Type                   | Description                                |
+| ---------- | ---------------------- | ------------------------------------------ |
+| `source`   | `number`               | Player source to capture                   |
+| `url`      | `string`               | Remote upload URL                          |
+| `options`  | `object`               | Capture options (see below)                |
+| `callback` | `function`             | Called with the remote API's JSON response |
+| `dataType` | `'base64'` \| `'blob'` | Upload format. Default: `'base64'`         |
 
 #### Options
 
-The `options` argument accepts an object with the following fields:
+| Field       | Type     | Default  | Description                                          |
+| ----------- | -------- | -------- | ---------------------------------------------------- |
+| `encoding`  | `string` | `'webp'` | Image encoding format: `'webp'`, `'jpg'`, or `'png'` |
+| `headers`   | `object` | `{}`     | HTTP headers included in the upload request          |
+| `formField` | `string` | `'file'` | FormData field name for the uploaded file            |
+| `filename`  | `string` |          | File name used in the FormData (without extension)   |
+| `maxWidth`  | `number` | `1920`   | Maximum capture width in pixels                      |
+| `maxHeight` | `number` | `1080`   | Maximum capture height in pixels                     |
 
-| Field       | Type           | Default  | Description                                                               |
-| ----------- | -------------- | -------- | ------------------------------------------------------------------------- |
-| `headers`   | `object/table` | `null`   | Optional HTTP headers to include in the capture request.                  |
-| `formField` | `string`       | `null`   | The form field name to be used when uploading the captured data.          |
-| `filename`  | `string`       | `null`   | Specifies the name of the file when saving or transmitting captured data. |
-| `encoding`  | `string`       | `'webp'` | Specifies the encoding format for the captured image (e.g., `'webp'`).    |
+```lua
+exports.screencapture:remoteUpload(source, 'https://api.fivemanage.com/api/v3/file', {
+    encoding = 'webp',
+    headers = { ['Authorization'] = 'your-api-key' },
+}, function(response)
+    print(response.data.url)
+end, 'blob')
+```
 
 ```ts
-RegisterCommand(
-  'remoteCapture',
-  (_: string, args: string[]) => {
-    exp.screencapture.remoteUpload(
-      args[0],
-      'https://api.fivemanage.com/api/v3/file',
-      {
-        encoding: 'webp',
-        headers: {
-          Authorization: '',
-        },
-      },
-      (data: any) => {
-        console.log(data);
-      },
-      'blob',
-    );
+exports.screencapture.remoteUpload(
+  source,
+  'https://api.fivemanage.com/api/v3/file',
+  {
+    encoding: 'webp',
+    headers: { Authorization: 'your-api-key' },
   },
-  false,
+  (response: any) => {
+    console.log(response.data.url);
+  },
+  'blob',
 );
 ```
 
-## Lua example with `remoteUpload`
+---
+
+## Video capture
+
+> **Experimental.** Video capture is functional but has not been extensively tested across different hardware, FiveM builds, or CEF versions. The API may change. VP9 encoding relies on the WebCodecs API being available in FiveM's bundled Chromium — if encoding silently produces no frames, the resulting file will contain only the container header. Please report any issues.
+
+Video is recorded as WebM (VP9) via the player's NUI. Chunks are streamed to the server as they are produced, assembled on disk, and the callback is fired when the recording is stopped and finalized.
+
+Use `INTERNAL_stopServerCaptureStream` to stop an active recording — it works for both `serverCaptureStream` and `remoteUploadStream`.
+
+---
+
+### `serverCaptureStream` — server-side export
+
+Starts a video recording for a player. When stopped, the assembled WebM file path is passed to the callback. The file lives in `screencapture/tmp/` and the caller is responsible for it.
+
+| Parameter  | Type       | Description                                              |
+| ---------- | ---------- | -------------------------------------------------------- |
+| `source`   | `number`   | Player source to record                                  |
+| `options`  | `object`   | Capture options (see below)                              |
+| `callback` | `function` | Called with the WebM file path (`string`) when finalized |
+
+#### Options
+
+| Field       | Type     | Default | Description                      |
+| ----------- | -------- | ------- | -------------------------------- |
+| `maxWidth`  | `number` | `1920`  | Maximum capture width in pixels  |
+| `maxHeight` | `number` | `1080`  | Maximum capture height in pixels |
 
 ```lua
-exports.screencapture:remoteUpload(args[1], "https://api.fivemanage.com/api/v3/file", {
-    encoding = "webp",
-    headers = {
-        ["Authorization"] = ""
-    }
-}, function(data)
-    print(data.url)
-end, "blob")
+exports.screencapture:serverCaptureStream(source, {}, function(filePath)
+    local f = io.open(filePath, 'rb')
+    if f then
+        local size = f:seek('end')
+        f:close()
+        print(('Recorded %d bytes (%.2f MB)'):format(size, size / 1024 / 1024))
+    end
+end)
 ```
 
-## High-Resolution Display Optimization
+```ts
+exports.screencapture.serverCaptureStream(source, {}, (filePath: string) => {
+  const data = fs.readFileSync(filePath);
+  fs.writeFileSync('./recording.webm', data);
+  fs.unlinkSync(filePath); // clean up the temp file
+});
+```
 
-For users with 4K, ultrawide, or other high-resolution displays, you can customize the maximum screenshot resolution to balance quality and payload size:
+---
+
+### `remoteUploadStream` — server-side export
+
+Starts a video recording for a player and uploads the resulting WebM to a remote URL when stopped. The callback receives the remote API's JSON response. The temp file is deleted automatically after upload.
+
+| Parameter  | Type       | Description                                |
+| ---------- | ---------- | ------------------------------------------ |
+| `source`   | `number`   | Player source to record                    |
+| `url`      | `string`   | Remote upload URL                          |
+| `options`  | `object`   | Upload options (see below)                 |
+| `callback` | `function` | Called with the remote API's JSON response |
+
+#### Options
+
+| Field       | Type     | Default       | Description                                     |
+| ----------- | -------- | ------------- | ----------------------------------------------- |
+| `headers`   | `object` | `{}`          | HTTP headers included in the upload request     |
+| `formField` | `string` | `'file'`      | FormData field name for the uploaded file       |
+| `filename`  | `string` | `'recording'` | File name in the FormData (`.webm` is appended) |
+| `maxWidth`  | `number` | `1920`        | Maximum capture width in pixels                 |
+| `maxHeight` | `number` | `1080`        | Maximum capture height in pixels                |
 
 ```lua
--- Allow higher resolution for better quality (may increase upload time)
-exports.screencapture:remoteUpload(args[1], "https://api.fivemanage.com/api/v3/file", {
-    encoding = "webp",
-    maxWidth = 2560,
-    maxHeight = 1440,
-    headers = {
-        ["Authorization"] = ""
-    }
-}, function(data)
-    print(data.url)
-end, "blob")
-
--- Use lower resolution for faster uploads
-exports.screencapture:remoteUpload(args[1], "https://api.fivemanage.com/api/v3/file", {
-    encoding = "webp",
-    maxWidth = 1280,
-    maxHeight = 720,
-    headers = {
-        ["Authorization"] = ""
-    }
-}, function(data)
-    print(data.url)
-end, "blob")
+exports.screencapture:remoteUploadStream(source, 'https://api.fivemanage.com/api/v3/file', {
+    headers = { ['Authorization'] = 'your-api-key' },
+    filename = 'gameplay',
+}, function(response)
+    print(response.data.url)
+end)
 ```
 
-## Screenshot Basic compatibility
+```ts
+exports.screencapture.remoteUploadStream(
+  source,
+  'https://api.fivemanage.com/api/v3/file',
+  {
+    headers: { Authorization: 'your-api-key' },
+    filename: 'gameplay',
+  },
+  (response: any) => {
+    console.log(response.data.url);
+  },
+);
+```
 
+---
 
+### `INTERNAL_stopServerCaptureStream` — server-side export
 
-### requestScreenshotUpload (client-side export)
-#### This is NOT recommended to use, as you risk exposing tokens to clients.
+Stops the active recording for a player. Triggers `output.finalize()` in the NUI which flushes remaining encoded frames, then fires the callback registered by `serverCaptureStream` or `remoteUploadStream`.
+
+| Parameter | Type     | Description                           |
+| --------- | -------- | ------------------------------------- |
+| `source`  | `number` | Player source whose recording to stop |
+
+```lua
+exports.screencapture:INTERNAL_stopServerCaptureStream(source)
+```
+
+---
+
+## Screenshot-basic compatibility
+
+### `requestScreenshotUpload` — client-side export
+
+> **Not recommended.** Upload tokens are exposed to the client.
 
 ```lua
 exports['screencapture']:requestScreenshotUpload('https://api.fivemanage.com/api/v3/file', 'file', {
-    headers = {
-        ["Authorization"] = API_TOKEN
-    },
-    encoding = "webp"
+    headers = { ['Authorization'] = 'your-api-key' },
+    encoding = 'webp',
 }, function(data)
     local resp = json.decode(data)
-    print(resp.url);
-    TriggerEvent('chat:addMessage', { template = '<img src="{0}" style="max-width: 300px;" />', args = { resp.url } })
+    print(resp.url)
 end)
 ```
 
-### requestScreenshot (client-side export)
+### `requestScreenshot` — client-side export
 
-This export returns a base64 data URI of the screenshot, similar to screenshot-basic. It does not upload the image, but provides the raw image data to your callback.
+Returns a base64 data URI of the screenshot directly to the callback without uploading.
 
 ```lua
 exports['screencapture']:requestScreenshot({ encoding = 'jpg' }, function(data)
-    -- 'data' is a base64-encoded image string (data URI)
+    -- data is a base64-encoded image data URI
     print(data)
-    -- You can use the data URI directly in HTML or upload it manually
 end)
 ```
-
-## What will this include?
-
-1. Server exports both for getting image data and uploading images/videos from the server
-2. Client exports (maybe)
-3. Upload images or videos from NUI, just more secure.
-4. React, Svelt and Vue packages + publishing all internal packages like @screencapture/gameview (SoonTM)

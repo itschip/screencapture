@@ -1,45 +1,97 @@
+import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
+
 import { uploadStore } from './bootstrap';
-import { CallbackFn, CaptureOptions, DataType, ScreenshotBasicCallbackFn, createScreenshotBasicUploadData, createRegularUploadData } from './types';
+import {
+  CallbackFn,
+  CaptureOptions,
+  DataType,
+  ScreenshotBasicCallbackFn,
+  StreamRemoteConfig,
+  createScreenshotBasicUploadData,
+  createRegularUploadData,
+} from './types';
 import { exportHandler } from './utils';
 
-global.exports("serverCaptureStream", (source: number) => {
+// Temp directory for in-progress video recordings, one .webm file per active stream.
+const tempDir = path.join(GetResourcePath(GetCurrentResourceName()), 'tmp');
+mkdir(tempDir, { recursive: true }).catch((err) => {
+  console.error('[screencapture] Failed to create temp directory:', err);
+});
+
+// Start a video recording for a specific player source.
+// The callback receives the assembled WebM file path once the recording is stopped.
+global.exports('serverCaptureStream', (source: number, options: CaptureOptions, callback: CallbackFn) => {
+  if (!source) return console.error('[screencapture] source is required for serverCaptureStream');
+
   const token = uploadStore.addStream({
-    callback: null,
-    isRemote: false,
-    remoteConfig: null,
-  })
+    source,
+    tempDir,
+    callback: callback ?? (() => {}),
+  });
 
-  emitNet("screencapture:captureStream", source, token, {})
-})
+  emitNet('screencapture:captureStream', source, token, options ?? {});
+});
 
-// DO NOT USE
-global.exports("INTERNAL_stopServerCaptureStream", (source: number) => {
-  emitNet("screencapture:INTERNAL:stopCaptureStream", source)
-})
+// Record a video and upload it to a remote URL once stopped.
+// The callback receives the remote API's JSON response.
+global.exports(
+  'remoteUploadStream',
+  (
+    source: number,
+    url: string,
+    options: StreamRemoteConfig & Pick<CaptureOptions, 'maxWidth' | 'maxHeight'>,
+    callback: CallbackFn,
+  ) => {
+    if (!source) return console.error('[screencapture] source is required for remoteUploadStream');
+    if (!url) return console.error('[screencapture] url is required for remoteUploadStream');
 
-// upload the file from the server and return the raw response
+    const token = uploadStore.addStream({
+      source,
+      tempDir,
+      callback: callback ?? (() => {}),
+      isRemote: true,
+      remoteUrl: url,
+      remoteConfig: {
+        headers: options?.headers,
+        formField: options?.formField,
+        filename: options?.filename,
+      },
+    });
+
+    emitNet('screencapture:captureStream', source, token, options ?? {});
+  },
+);
+
+// Stop the active recording for a specific player source.
+// The NUI will call output.finalize() which triggers the /stream-finalize
+// endpoint, assembles the file, and fires the callback.
+global.exports('INTERNAL_stopServerCaptureStream', (source: number) => {
+  emitNet('screencapture:INTERNAL:stopCaptureStream', source);
+});
+
 global.exports(
   'remoteUpload',
   (source: number, url: string, options: CaptureOptions, callback: CallbackFn, dataType: DataType = 'base64') => {
     if (!source) return console.error('source is required for serverCapture');
 
-    const token = uploadStore.addUpload(createRegularUploadData({
-      callback: callback,
-      isRemote: true,
-      remoteConfig: {
-        ...options,
-        encoding: options.encoding ?? 'webp',
-      },
-      url,
-      dataType,
-    }));
+    const token = uploadStore.addUpload(
+      createRegularUploadData({
+        callback: callback,
+        isRemote: true,
+        remoteConfig: {
+          ...options,
+          encoding: options.encoding ?? 'webp',
+        },
+        url,
+        dataType,
+      }),
+    );
 
     emitNet('screencapture:captureScreen', source, token, options, dataType);
   },
 );
 
-// dataType here doesn't matter for NUI, its just for the server to know how to handle the data
-// when calling this export, the client will always send it back as base64
 global.exports(
   'serverCapture',
   (source: number, options: CaptureOptions, callback: CallbackFn, dataType: DataType = 'base64') => {
@@ -50,18 +102,20 @@ global.exports(
       encoding: options.encoding ?? 'webp',
     };
 
-    const token = uploadStore.addUpload(createRegularUploadData({
-      callback,
-      isRemote: false,
-      remoteConfig: opts,
-      dataType,
-    }));
+    const token = uploadStore.addUpload(
+      createRegularUploadData({
+        callback,
+        isRemote: false,
+        remoteConfig: opts,
+        dataType,
+      }),
+    );
 
     emitNet('screencapture:captureScreen', source, token, opts, dataType);
   },
 );
 
-// screeenshot-basic backwards compatibility
+// screenshot-basic backwards compatibility
 function requestClientScreenshot(source: number, options: CaptureOptions, callback: ScreenshotBasicCallbackFn) {
   if (!source) return console.error('source is required for requestClientScreenshot');
 
@@ -72,12 +126,14 @@ function requestClientScreenshot(source: number, options: CaptureOptions, callba
 
   const isBlob = options.fileName ? true : false;
 
-  const token = uploadStore.addUpload(createScreenshotBasicUploadData({
-    callback,
-    isRemote: false,
-    remoteConfig: opts,
-    dataType: isBlob ? 'blob' : 'base64',
-  }));
+  const token = uploadStore.addUpload(
+    createScreenshotBasicUploadData({
+      callback,
+      isRemote: false,
+      remoteConfig: opts,
+      dataType: isBlob ? 'blob' : 'base64',
+    }),
+  );
 
   emitNet('screencapture:captureScreen', source, token, opts, isBlob ? 'blob' : 'base64');
 }
@@ -88,6 +144,9 @@ global.exports(
     requestClientScreenshot(source, options, callback);
   },
 );
-exportHandler("requestClientScreenshot", (source: number, options: CaptureOptions, callback: ScreenshotBasicCallbackFn) => {
-  requestClientScreenshot(source, options, callback);
-});
+exportHandler(
+  'requestClientScreenshot',
+  (source: number, options: CaptureOptions, callback: ScreenshotBasicCallbackFn) => {
+    requestClientScreenshot(source, options, callback);
+  },
+);

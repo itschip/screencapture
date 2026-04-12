@@ -20,11 +20,6 @@ type CaptureRequest = {
   maxHeight?: number;
 };
 
-function log(...args: any[]) {
-  if (import.meta.env.MODE === 'production') return
-  log(...args);
-}
-
 export class Capture {
   #gameView: any;
   #canvas: HTMLCanvasElement | null = null;
@@ -48,8 +43,6 @@ export class Capture {
     });
   }
 
-  // fuck me
-  // i guess this is the downside of using webgl??
   private calculateDimensions(request: CaptureRequest): { width: number; height: number } {
     const originalWidth = window.innerWidth;
     const originalHeight = window.innerHeight;
@@ -67,7 +60,7 @@ export class Capture {
 
     return {
       width: Math.floor(originalWidth * scale),
-      height: Math.floor(originalHeight * scale)
+      height: Math.floor(originalHeight * scale),
     };
   }
 
@@ -78,18 +71,16 @@ export class Capture {
     this.#canvas.width = width;
     this.#canvas.height = height;
 
-    log(`Capturing at ${width}x${height} (original: ${window.innerWidth}x${window.innerHeight})`);
-
     this.#gameView = createGameView(this.#canvas);
     this.#gameView.resize(width, height);
 
-    // stupid fix for black images
+    // Wait for the FiveM WebGL hook to populate the game framebuffer
     await this.waitForFrames(3);
 
     const enc = request.encoding ?? 'png';
     let imageData: string | Blob;
-    // callbackUrl is only used for screenshot-basic requestScreenshot export
-    // everything else will be processed by server-side code
+    // callbackUrl is only set on the screenshot-basic requestScreenshot path;
+    // everything else is handled server-side via the upload endpoint
     if (request.callbackUrl) {
       imageData = await this.createDataURL(this.#canvas, enc, request.quality);
     } else {
@@ -138,13 +129,10 @@ export class Capture {
   createRequestBody(request: CaptureRequest, imageData: string | Blob): BodyInit {
     if (imageData instanceof Blob) {
       const formData = new FormData();
-      // request.formField should only be used on the server-side when we upload to a third party service
       formData.append('file', imageData);
-
       return formData;
     }
 
-    // dataType is just here in order to know what to do with the data when we get it back
     return JSON.stringify({ data: imageData, id: request.correlationId });
   }
 
@@ -161,27 +149,25 @@ export class Capture {
 
   createBlob(canvas: HTMLCanvasElement, enc: Encoding, requestQuality?: number): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      // Calculate adaptive quality based on canvas size
       const pixelCount = canvas.width * canvas.height;
-      let quality = 0.7; // default
+      let quality = 0.7;
 
       if (requestQuality) {
         quality = requestQuality;
       } else {
-        // wtf am I doing
-        if (pixelCount > 2073600) { //1920x1080
+        // Scale quality down for high-resolution captures to keep payload size reasonable
+        if (pixelCount > 2073600) {
+          // > 1920×1080
           quality = 0.5;
-        } else if (pixelCount > 1440000) { //1200x1200
+        } else if (pixelCount > 1440000) {
+          // > 1200×1200
           quality = 0.6;
         }
       }
 
-      log(`Using quality ${quality} for ${canvas.width}x${canvas.height} (${pixelCount} pixels)`);
-
       canvas.toBlob(
         (blob) => {
           if (blob) {
-            log(`Generated blob: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
             resolve(blob);
           } else {
             reject('No blob available');

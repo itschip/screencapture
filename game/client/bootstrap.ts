@@ -12,7 +12,6 @@ RegisterNuiCallbackType('screenshot_upload_proxy');
 const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
 const serverEndpoint = `${protocol}://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
 
-
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
   SendNUIMessage({
     ...options,
@@ -30,7 +29,6 @@ onNet('screencapture:INTERNAL_uploadComplete', (response: unknown, correlationId
     clientCaptureMap.delete(correlationId);
   }
 });
-
 
 // screenshot-basic compatibility
 on('__cfx_nui:screenshot_created', (body: ScreenshotCreatedBody, cb: (arg: any) => void) => {
@@ -63,14 +61,11 @@ async function requestScreenshotUpload(
   optionsOrCB: CaptureRequest | RequestScreenshotUploadCB,
   callback: RequestScreenshotUploadCB,
 ) {
-  // forgive me
   const isOptions = typeof optionsOrCB === 'object' && optionsOrCB !== null;
   const realOptions = isOptions
     ? (optionsOrCB as CaptureRequest)
     : ({ headers: {}, encoding: 'webp' } as CaptureRequest);
-  const realCallback = isOptions
-    ? (callback as RequestScreenshotUploadCB)
-    : (optionsOrCB as RequestScreenshotUploadCB);
+  const realCallback = isOptions ? (callback as RequestScreenshotUploadCB) : (optionsOrCB as RequestScreenshotUploadCB);
 
   const correlationId = uuidv4();
   clientCaptureMap.set(correlationId, realCallback);
@@ -109,18 +104,20 @@ global.exports(
     callback: RequestScreenshotUploadCB,
   ) => {
     return await requestScreenshotUpload(url, formField, optionsOrCB, callback);
-  }
+  },
 );
 
 function requestScreenshot(options: CaptureRequest, callback: RequestScreenshotUploadCB) {
   const correlationId = uuidv4();
 
-  const realOptions = (callback !== undefined) ? options : {
-    encoding: 'jpg'
-  } as CaptureRequest;
+  const realOptions =
+    callback !== undefined
+      ? options
+      : ({
+          encoding: 'jpg',
+        } as CaptureRequest);
 
-  // :)
-  const realCb = (typeof callback === 'function') ? callback : (typeof options === 'function' ? options : undefined);
+  const realCb = typeof callback === 'function' ? callback : typeof options === 'function' ? options : undefined;
   if (typeof realCb !== 'function') {
     return console.error('Callback is not a function');
   }
@@ -147,17 +144,17 @@ function createImageCaptureMessage(options: CaptureRequest) {
   });
 }
 
-onNet("screencapture:captureStream", (token: string, options: object) => {
+onNet('screencapture:captureStream', (token: string, options: object) => {
   SendNUIMessage({
     ...options,
     uploadToken: token,
     action: 'capture-stream-start',
-    serverEndpoint: `${serverEndpoint}/stream`,
+    serverEndpoint: serverEndpoint,
   });
-})
+});
 
-onNet("screencapture:INTERNAL:stopCaptureStream", () => {
+onNet('screencapture:INTERNAL:stopCaptureStream', () => {
   SendNUIMessage({
     action: 'capture-stream-stop',
-  })
-})
+  });
+});
