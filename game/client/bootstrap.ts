@@ -10,7 +10,7 @@ RegisterNuiCallbackType('screenshot_created');
 RegisterNuiCallbackType('screenshot_upload_proxy');
 
 const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
-const serverEndpoint = `${protocol}://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
+const serverEndpoint = protocol === 'http' ? `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}` : `https://${GetCurrentResourceName()}`;
 
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
   SendNUIMessage({
@@ -114,8 +114,8 @@ function requestScreenshot(options: CaptureRequest, callback: RequestScreenshotU
     callback !== undefined
       ? options
       : ({
-          encoding: 'jpg',
-        } as CaptureRequest);
+        encoding: 'jpg',
+      } as CaptureRequest);
 
   const realCb = typeof callback === 'function' ? callback : typeof options === 'function' ? options : undefined;
   if (typeof realCb !== 'function') {
