@@ -90,7 +90,8 @@ async function requestScreenshotUpload(
     uploadToken: token,
     dataType: 'base64',
     correlationId,
-    callbackUrl: `${serverEndpoint}/screenshot_upload_proxy`,
+    // since this goes through the nui proxy, this will stay like this.
+    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_upload_proxy`,
   });
 }
 
