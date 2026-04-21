@@ -17,5 +17,10 @@ files {
 
 provide 'screenshot-basic'
 
--- use https if you're having trouble with server host providers
+-- use 'nui' if you're having trouble uploads. nui is not yet supported for videos
 protocol 'http'
+
+-- bytes per second for nui protocol
+-- change this as you like
+images_bps '1000000'
+stream_bps '5000000'

@@ -1,18 +1,31 @@
 import { request } from 'http';
 import { netEventController } from './event';
-import { CaptureRequest, RequestScreenshotUploadCB, ScreenshotCreatedBody } from './types';
+import { CaptureRequest, RequestScreenshotUploadCB } from './types';
 import { exportHandler, uuidv4 } from './utils';
 
-const clientCaptureMap = new Map<string, RequestScreenshotUploadCB>();
-const clientUploadTokenMap = new Map<string, string>();
+import './protocols/nui';
+
+export const clientCaptureMap = new Map<string, RequestScreenshotUploadCB>();
+export const clientUploadTokenMap = new Map<string, string>();
 
 RegisterNuiCallbackType('screenshot_created');
 RegisterNuiCallbackType('screenshot_upload_proxy');
+RegisterNuiCallbackType('capture_screen');
 
 const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
-const serverEndpoint = protocol === 'http' ? `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}` : `https://${GetCurrentResourceName()}`;
+const serverEndpoint = `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
 
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
+  if (protocol === 'nui') {
+    return SendNUIMessage({
+      ...options,
+      uploadToken: token,
+      callbackUrl: `https://${GetCurrentResourceName()}/capture_screen`,
+      dataType,
+      action: 'capture',
+    });
+  }
+
   SendNUIMessage({
     ...options,
     uploadToken: token,
@@ -30,30 +43,6 @@ onNet('screencapture:INTERNAL_uploadComplete', (response: unknown, correlationId
   }
 });
 
-// screenshot-basic compatibility
-on('__cfx_nui:screenshot_created', (body: ScreenshotCreatedBody, cb: (arg: any) => void) => {
-  cb(true);
-
-  if (body.id !== undefined && clientCaptureMap.has(body.id)) {
-    const callback = clientCaptureMap.get(body.id);
-    if (callback) {
-      callback(body.data);
-      clientCaptureMap.delete(body.id);
-    }
-  }
-});
-
-on('__cfx_nui:screenshot_upload_proxy', (body: any, cb: (arg: any) => void) => {
-  cb(true);
-
-  if (body.id !== undefined && clientUploadTokenMap.has(body.id)) {
-    const token = clientUploadTokenMap.get(body.id);
-    if (token && body.data) {
-      TriggerLatentServerEvent('screencapture:PerformUploadProxy', 500000, token, body.data);
-    }
-    clientUploadTokenMap.delete(body.id);
-  }
-});
 
 async function requestScreenshotUpload(
   url: string,
@@ -141,7 +130,7 @@ function createImageCaptureMessage(options: CaptureRequest) {
   SendNUIMessage({
     ...options,
     action: 'capture',
-    serverEndpoint: `${serverEndpoint}/upload`,
+    ...(protocol === 'http' && { serverEndpoint: `${serverEndpoint}/upload` }),
   });
 }
 

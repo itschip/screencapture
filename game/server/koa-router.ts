@@ -1,6 +1,5 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import { writeFileSync } from 'fs';
 import { appendFile, readFile, unlink } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 
@@ -10,9 +9,9 @@ import { multer } from './multer';
 
 import FormData from 'form-data';
 import fetch from 'node-fetch';
-import { Blob } from 'node:buffer';
-import { CaptureOptions, DataType, StreamRemoteConfig } from './types';
+import { StreamRemoteConfig } from './types';
 import { UploadStore } from './upload-store';
+import { processUpload } from './process-upload';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -57,77 +56,23 @@ export async function createServer(uploadStore: UploadStore) {
     ctx.response.append('Access-Control-Allow-Origin', '*');
     ctx.response.append('Access-Control-Allow-Methods', 'GET, POST');
 
-    const {
-      callback,
-      dataType,
-      isRemote,
-      remoteConfig,
-      url,
-      playerSource,
-      correlationId,
-      screenshotBasicCompatibility,
-    } = uploadStore.getUpload(token);
-
-    if (!ctx.files) {
+    const file = ctx.file;
+    if (!file) {
       ctx.status = 400;
       ctx.body = { status: 'error', message: 'No file provided' };
+      return;
     }
 
-    const file = ctx.file;
-
     try {
-      const encoding = remoteConfig?.encoding || 'webp';
-      // base64 or buffer
-      const buf = await buffer(dataType, file.buffer, encoding);
-
-      if (isRemote) {
-        const response = await uploadFile(url, remoteConfig, buf, dataType);
-
-        if (screenshotBasicCompatibility) {
-          (callback as any)(false, response);
-        } else {
-          if (playerSource && correlationId) {
-            (callback as any)(response, playerSource, correlationId);
-          } else {
-            (callback as any)(response);
-          }
-        }
-      } else {
-        if (screenshotBasicCompatibility) {
-          // this will be a base64 string
-          if (remoteConfig?.fileName) {
-            const filename = saveFileToDisk(remoteConfig.fileName, buf);
-            (callback as any)(false, filename);
-          } else {
-            (callback as any)(false, buf);
-          }
-        } else {
-          (callback as any)(buf);
-        }
-      }
+      const uploadData = uploadStore.getUpload(token);
+      await processUpload(uploadData, file.buffer);
 
       ctx.status = 200;
       ctx.body = { status: 'success' };
     } catch (err) {
-      if (err instanceof Error) {
-        if (screenshotBasicCompatibility) {
-          (callback as any)(err.message, null);
-        } else {
-          (callback as any)(err);
-        }
-
-        ctx.status = 500;
-        ctx.body = { status: 'error', message: err.message };
-      } else {
-        if (screenshotBasicCompatibility) {
-          (callback as any)('An unknown error occurred', null);
-        } else {
-          (callback as any)(new Error('An unknown error occurred'));
-        }
-
-        ctx.status = 500;
-        ctx.body = { status: 'error', message: 'An unknown error occurred' };
-      }
+      console.error('[screencapture] upload error:', err);
+      ctx.status = 500;
+      ctx.body = { status: 'error', message: err instanceof Error ? err.message : 'An unknown error occurred' };
     }
   });
 
@@ -200,51 +145,6 @@ export async function createServer(uploadStore: UploadStore) {
   setHttpCallback(app.callback());
 }
 
-export async function uploadFile(
-  url: string | undefined,
-  config: CaptureOptions | null,
-  buf: string | Buffer,
-  dataType: DataType,
-) {
-  if (!url) throw new Error('No remote URL provided');
-  if (!config) throw new Error('No remote config provided');
-
-  try {
-    const body = await createRequestBody(buf, dataType, config);
-
-    let response;
-    if (body instanceof FormData) {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          ...body.getHeaders(),
-          ...config.headers,
-        },
-        body: body.getBuffer(),
-      });
-    } else {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: config.headers || {},
-        body: body as any,
-      });
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Failed to upload file to ${url}. Status: ${response.status}. Response: ${text}`);
-    }
-
-    const res = await response.json();
-    return res;
-  } catch (err) {
-    console.error('Error uploading file:', err);
-    if (err instanceof Error) {
-      throw new Error(err.message);
-    }
-  }
-}
-
 // Uploads a completed WebM video Buffer to a remote URL via multipart FormData.
 // Kept separate from uploadFile() since video always uses video/webm content-type
 // and doesn't need the base64/blob DataType branching that images require.
@@ -273,98 +173,4 @@ async function uploadStreamFile(url: string, config: StreamRemoteConfig, buf: Bu
   }
 
   return response.json();
-}
-
-function createRequestBody(
-  buf: string | Buffer,
-  dataType: DataType,
-  config: CaptureOptions,
-): Promise<BodyInit | FormData> {
-  return new Promise((resolve, reject) => {
-    const { formField, filename } = config;
-
-    const filenameExt = filename ? `${filename}.${config.encoding}` : `screenshot.${config.encoding}`;
-
-    if (dataType === 'blob') {
-      const formData = new FormData();
-      formData.append(formField || 'file', buf, {
-        filename: filenameExt,
-        knownLength: (buf as Buffer).length,
-      });
-      if (filename) {
-        formData.append('filename', filename);
-      }
-
-      return resolve(formData);
-    }
-
-    if (typeof buf === 'string' && dataType === 'base64') {
-      return resolve(buf);
-    }
-
-    return reject('Invalid body data');
-  });
-}
-
-export async function buffer(
-  dataType: DataType,
-  imageData: Buffer,
-  encoding: string = 'webp',
-): Promise<string | Buffer> {
-  return new Promise(async (resolve, reject) => {
-    if (dataType === 'base64') {
-      const blob = new Blob([imageData]);
-      const dataURL = await blobToBase64(blob, encoding);
-      resolve(dataURL);
-    } else {
-      resolve(imageData);
-    }
-  });
-}
-
-export function base64ToBuffer(data: string): Buffer {
-  const matches = data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  if (matches && matches[2]) {
-    return Buffer.from(matches[2], 'base64');
-  }
-  return Buffer.from(data, 'base64');
-}
-
-async function blobToBase64(blob: Blob, encoding: string = 'webp'): Promise<string> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-
-      const mimeType = getMimeType(encoding);
-
-      resolve(`data:${mimeType};base64,${base64}`);
-    } catch (err) {
-      reject(err);
-    }
-  });
-}
-
-function getMimeType(encoding: string): string {
-  switch (encoding.toLowerCase()) {
-    case 'png':
-      return 'image/png';
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'webp':
-      return 'image/webp';
-    default:
-      return 'image/webp';
-  }
-}
-
-function saveFileToDisk(fileName: string, data: string | Buffer) {
-  try {
-    writeFileSync(fileName, data);
-    return fileName;
-  } catch (err) {
-    console.error('Error saving file to disk:', err);
-    throw new Error('Error saving file to disk');
-  }
 }

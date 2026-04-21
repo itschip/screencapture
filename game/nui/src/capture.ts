@@ -133,7 +133,7 @@ export class Capture {
       return formData;
     }
 
-    return JSON.stringify({ data: imageData, id: request.correlationId });
+    return JSON.stringify({ data: imageData, id: request.correlationId, uploadToken: request.uploadToken });
   }
 
   createDataURL(canvas: HTMLCanvasElement, enc: Encoding, requestQuality?: number): Promise<string> {

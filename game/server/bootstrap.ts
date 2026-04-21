@@ -42,7 +42,16 @@ eventController<RequestUploadToken, string>(
   },
 );
 
-import { uploadFile, base64ToBuffer } from './koa-router';
+import { processUpload, uploadFile, base64ToBuffer } from './process-upload';
+
+onNet('screencapture:capture-screen', async (token: string, base64Data: string) => {
+  try {
+    const uploadData = uploadStore.getUpload(token);
+    await processUpload(uploadData, base64Data);
+  } catch (err) {
+    console.error('[screencapture] capture-screen error:', err);
+  }
+});
 
 onNet('screencapture:PerformUploadProxy', async (token: string, base64Data: string) => {
   const uploadData = uploadStore.getUpload(token);
