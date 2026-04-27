@@ -23,16 +23,19 @@ type CaptureRequest = {
 export class Capture {
   #gameView: any;
   #canvas: HTMLCanvasElement | null = null;
+  #queue: Promise<void> = Promise.resolve();
 
   private readonly MAX_WIDTH = 1920;
   private readonly MAX_HEIGHT = 1080;
 
   start() {
-    window.addEventListener('message', async (event) => {
+    window.addEventListener('message', (event) => {
       const data = event.data as CaptureRequest;
 
       if (data.action === 'capture') {
-        await this.captureScreen(data);
+        this.#queue = this.#queue.then(() => this.captureScreen(data)).catch((err) => {
+          console.error('[screencapture] capture error:', err);
+        });
       }
     });
 
@@ -74,26 +77,29 @@ export class Capture {
     this.#gameView = createGameView(this.#canvas);
     this.#gameView.resize(width, height);
 
-    // Wait for the FiveM WebGL hook to populate the game framebuffer
-    await this.waitForFrames(3);
+    try {
+      // Wait for the FiveM WebGL hook to populate the game framebuffer
+      await this.waitForFrames(3);
 
-    const enc = request.encoding ?? 'png';
-    let imageData: string | Blob;
-    // callbackUrl is only set on the screenshot-basic requestScreenshot path;
-    // everything else is handled server-side via the upload endpoint
-    if (request.callbackUrl) {
-      imageData = await this.createDataURL(this.#canvas, enc, request.quality);
-    } else {
-      imageData = await this.createBlob(this.#canvas, enc, request.quality);
+      const enc = request.encoding ?? 'png';
+      let imageData: string | Blob;
+      // callbackUrl is only set on the screenshot-basic requestScreenshot path;
+      // everything else is handled server-side via the upload endpoint
+      if (request.callbackUrl) {
+        imageData = await this.createDataURL(this.#canvas, enc, request.quality);
+      } else {
+        imageData = await this.createBlob(this.#canvas, enc, request.quality);
+      }
+
+      if (!imageData) return console.error('No image available');
+
+      await this.httpUploadImage(request, imageData);
+    } finally {
+      this.#gameView.dispose();
+      this.#canvas.remove();
+      this.#gameView = null;
+      this.#canvas = null;
     }
-
-    if (!imageData) return console.error('No image available');
-
-    await this.httpUploadImage(request, imageData);
-    this.#gameView.dispose();
-    this.#canvas.remove();
-    this.#gameView = null;
-    this.#canvas = null;
   }
 
   async httpUploadImage(request: CaptureRequest, imageData: string | Blob) {
