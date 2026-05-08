@@ -9,7 +9,7 @@ import { multer } from './multer';
 
 import FormData from 'form-data';
 import fetch from 'node-fetch';
-import { StreamRemoteConfig } from './types';
+import { StreamRemoteConfig, StreamUploadData } from './types';
 import { UploadStore } from './upload-store';
 import { processUpload } from './process-upload';
 
@@ -109,27 +109,7 @@ export async function createServer(uploadStore: UploadStore) {
       const streamData = uploadStore.getStream(token);
       uploadStore.removeStream(token);
 
-      if (streamData.isRemote) {
-        // Read the assembled file into memory, then immediately delete it —
-        // we do this in a try/finally so the file is always cleaned up even
-        // if the remote upload throws.
-        let videoBuffer: Buffer;
-        try {
-          videoBuffer = await readFile(streamData.tempFilePath);
-        } finally {
-          await unlink(streamData.tempFilePath).catch((err) =>
-            console.error('[screencapture] failed to delete temp file:', err),
-          );
-        }
-
-        const response = await uploadStreamFile(streamData.remoteUrl!, streamData.remoteConfig!, videoBuffer!);
-
-        streamData.callback(response);
-      } else {
-        // Node.js Buffer → Lua marshaling is broken (Buffer serialises as a
-        // 0-indexed table, giving #data = 0 in Lua). Pass the path string instead.
-        streamData.callback(streamData.tempFilePath);
-      }
+      await finalizeStream(streamData);
 
       ctx.status = 200;
       ctx.body = { ok: true };
@@ -143,6 +123,34 @@ export async function createServer(uploadStore: UploadStore) {
   app.use(router.routes()).use(router.allowedMethods());
 
   setHttpCallback(app.callback());
+}
+
+// Shared finalization logic used by both the HTTP route and NUI event handler.
+// Branches on isRemote:
+//   remote → read file → upload to URL → delete file → callback(remoteResponse)
+//   local  → callback(tempFilePath), caller owns the file
+export async function finalizeStream(streamData: StreamUploadData): Promise<void> {
+  if (streamData.isRemote) {
+    // Read the assembled file into memory, then immediately delete it —
+    // we do this in a try/finally so the file is always cleaned up even
+    // if the remote upload throws.
+    let videoBuffer: Buffer;
+    try {
+      videoBuffer = await readFile(streamData.tempFilePath);
+    } finally {
+      await unlink(streamData.tempFilePath).catch((err) =>
+        console.error('[screencapture] failed to delete temp file:', err),
+      );
+    }
+
+    const response = await uploadStreamFile(streamData.remoteUrl!, streamData.remoteConfig!, videoBuffer!);
+
+    streamData.callback(response);
+  } else {
+    // Node.js Buffer → Lua marshaling is broken (Buffer serialises as a
+    // 0-indexed table, giving #data = 0 in Lua). Pass the path string instead.
+    streamData.callback(streamData.tempFilePath);
+  }
 }
 
 // Uploads a completed WebM video Buffer to a remote URL via multipart FormData.

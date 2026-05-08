@@ -11,6 +11,8 @@ export const clientUploadTokenMap = new Map<string, string>();
 RegisterNuiCallbackType('screenshot_created');
 RegisterNuiCallbackType('screenshot_upload_proxy');
 RegisterNuiCallbackType('capture_screen');
+RegisterNuiCallbackType('capture_stream_chunk');
+RegisterNuiCallbackType('capture_stream_finalize');
 
 const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
 const serverEndpoint = `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
@@ -135,6 +137,16 @@ function createImageCaptureMessage(options: CaptureRequest) {
 }
 
 onNet('screencapture:captureStream', (token: string, options: object) => {
+  if (protocol === 'nui') {
+    return SendNUIMessage({
+      ...options,
+      uploadToken: token,
+      action: 'capture-stream-start',
+      callbackUrl: `https://${GetCurrentResourceName()}/capture_stream_chunk`,
+      finalizeCallbackUrl: `https://${GetCurrentResourceName()}/capture_stream_finalize`,
+    });
+  }
+
   SendNUIMessage({
     ...options,
     uploadToken: token,

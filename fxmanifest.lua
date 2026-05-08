@@ -17,7 +17,7 @@ files {
 
 provide 'screenshot-basic'
 
--- use 'nui' if you're having trouble uploads. nui is not yet supported for videos
+-- use 'nui' if you're having trouble with uploads
 protocol 'http'
 
 -- bytes per second for nui protocol
