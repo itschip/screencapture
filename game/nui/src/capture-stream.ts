@@ -7,15 +7,27 @@ import type { StreamTargetChunk } from 'mediabunny';
 // 800 KB gives a comfortable margin.
 const CHUNK_SIZE = 800 * 1024;
 
-type CaptureStreamRequest = {
+type CaptureStreamHttpRequest = {
   action: CaptureStreamActions;
   uploadToken: string;
-  serverEndpoint?: string;
-  callbackUrl?: string;
-  finalizeCallbackUrl?: string;
+  serverEndpoint: string;
+  callbackUrl?: never;
+  finalizeCallbackUrl?: never;
   maxWidth?: number;
   maxHeight?: number;
 };
+
+type CaptureStreamNuiRequest = {
+  action: CaptureStreamActions;
+  uploadToken: string;
+  serverEndpoint?: never;
+  callbackUrl: string;
+  finalizeCallbackUrl: string;
+  maxWidth?: number;
+  maxHeight?: number;
+};
+
+type CaptureStreamRequest = CaptureStreamHttpRequest | CaptureStreamNuiRequest;
 
 export class CaptureStream {
   #gameView: ReturnType<typeof createGameView> | null = null;
@@ -155,11 +167,15 @@ export class CaptureStream {
         const bytes = chunk.data instanceof ArrayBuffer
           ? new Uint8Array(chunk.data)
           : new Uint8Array(chunk.data.buffer, chunk.data.byteOffset, chunk.data.byteLength);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
+
+        // Build base64 in larger batches for better performance
+        const BATCH = 8192;
+        const parts: string[] = [];
+        for (let i = 0; i < bytes.length; i += BATCH) {
+          const end = Math.min(i + BATCH, bytes.length);
+          parts.push(String.fromCharCode(...bytes.subarray(i, end)));
         }
-        const base64Data = btoa(binary);
+        const base64Data = btoa(parts.join(''));
 
         const response = await fetch(callbackUrl, {
           method: 'POST',
