@@ -1,4 +1,4 @@
-import { createServer } from './koa-router';
+import { createServer, finalizeStream } from './koa-router';
 import './export';
 import { eventController } from './event';
 import { RequestUploadToken, createRegularUploadData } from './types';
@@ -43,6 +43,7 @@ eventController<RequestUploadToken, string>(
 );
 
 import { processUpload, uploadFile, base64ToBuffer } from './process-upload';
+import { appendFile } from 'node:fs/promises';
 
 onNet('screencapture:capture-screen', async (token: string, base64Data: string) => {
   try {
@@ -95,5 +96,30 @@ onNet('screencapture:PerformUploadProxy', async (token: string, base64Data: stri
         }
       }
     }
+  }
+});
+
+// NUI protocol: receive a base64-encoded video chunk and append it to the stream's temp file.
+onNet('screencapture:stream-chunk-nui', async (token: string, base64Data: string) => {
+  try {
+    const streamData = uploadStore.getStream(token);
+    const chunk = base64ToBuffer(base64Data);
+
+    await appendFile(streamData.tempFilePath, chunk);
+    streamData.bytesReceived += chunk.length;
+  } catch (err) {
+    console.error('[screencapture] stream-chunk-nui error:', err);
+  }
+});
+
+// NUI protocol: finalize stream — all chunks have been delivered via latent events.
+onNet('screencapture:stream-finalize-nui', async (token: string) => {
+  try {
+    const streamData = uploadStore.getStream(token);
+    uploadStore.removeStream(token);
+
+    await finalizeStream(streamData);
+  } catch (err) {
+    console.error('[screencapture] stream-finalize-nui error:', err);
   }
 });

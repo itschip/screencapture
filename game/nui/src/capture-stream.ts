@@ -7,13 +7,27 @@ import type { StreamTargetChunk } from 'mediabunny';
 // 800 KB gives a comfortable margin.
 const CHUNK_SIZE = 800 * 1024;
 
-type CaptureStreamRequest = {
+type CaptureStreamHttpRequest = {
   action: CaptureStreamActions;
   uploadToken: string;
   serverEndpoint: string;
+  callbackUrl?: never;
+  finalizeCallbackUrl?: never;
   maxWidth?: number;
   maxHeight?: number;
 };
+
+type CaptureStreamNuiRequest = {
+  action: CaptureStreamActions;
+  uploadToken: string;
+  serverEndpoint?: never;
+  callbackUrl: string;
+  finalizeCallbackUrl: string;
+  maxWidth?: number;
+  maxHeight?: number;
+};
+
+type CaptureStreamRequest = CaptureStreamHttpRequest | CaptureStreamNuiRequest;
 
 export class CaptureStream {
   #gameView: ReturnType<typeof createGameView> | null = null;
@@ -75,7 +89,7 @@ export class CaptureStream {
   }
 
   async stream(request: CaptureStreamRequest) {
-    const { uploadToken, serverEndpoint } = request;
+    const { uploadToken, serverEndpoint, callbackUrl, finalizeCallbackUrl } = request;
     const { width, height } = this.calculateDimensions(request);
 
     this.#canvas = document.createElement('canvas');
@@ -88,26 +102,9 @@ export class CaptureStream {
     // Wait for the FiveM WebGL hook to populate the game framebuffer
     await this.waitForFrames(3);
 
-    const writable = new WritableStream<StreamTargetChunk>({
-      async write(chunk) {
-        const response = await fetch(`${serverEndpoint}/stream-chunk/${uploadToken}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: chunk.data,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Chunk upload failed: ${response.status}`);
-        }
-      },
-
-      async close() {
-        // Called when output.finalize() closes the stream — all chunks delivered.
-        await fetch(`${serverEndpoint}/stream-finalize/${uploadToken}`, {
-          method: 'POST',
-        });
-      },
-    });
+    const writable = callbackUrl
+      ? this.createNuiWritableStream(uploadToken, callbackUrl, finalizeCallbackUrl!)
+      : this.createHttpWritableStream(uploadToken, serverEndpoint!);
 
     this.#output = new Output({
       format: new WebMOutputFormat({ appendOnly: true }),
@@ -135,6 +132,70 @@ export class CaptureStream {
     this.#output.addVideoTrack(this.#videoSource);
     // Frame capture starts automatically once the output is started — no loop needed
     await this.#output.start();
+  }
+
+  private createHttpWritableStream(uploadToken: string, serverEndpoint: string): WritableStream<StreamTargetChunk> {
+    return new WritableStream<StreamTargetChunk>({
+      async write(chunk) {
+        const response = await fetch(`${serverEndpoint}/stream-chunk/${uploadToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: chunk.data,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Chunk upload failed: ${response.status}`);
+        }
+      },
+
+      async close() {
+        await fetch(`${serverEndpoint}/stream-finalize/${uploadToken}`, {
+          method: 'POST',
+        });
+      },
+    });
+  }
+
+  private createNuiWritableStream(
+    uploadToken: string,
+    callbackUrl: string,
+    finalizeCallbackUrl: string,
+  ): WritableStream<StreamTargetChunk> {
+    return new WritableStream<StreamTargetChunk>({
+      async write(chunk) {
+        // Convert binary chunk to base64 for NUI callback transport
+        const bytes = chunk.data instanceof ArrayBuffer
+          ? new Uint8Array(chunk.data)
+          : new Uint8Array(chunk.data.buffer, chunk.data.byteOffset, chunk.data.byteLength);
+
+        // Build base64 in larger batches for better performance
+        const BATCH = 8192;
+        const parts: string[] = [];
+        for (let i = 0; i < bytes.length; i += BATCH) {
+          const end = Math.min(i + BATCH, bytes.length);
+          parts.push(String.fromCharCode(...bytes.subarray(i, end)));
+        }
+        const base64Data = btoa(parts.join(''));
+
+        const response = await fetch(callbackUrl, {
+          method: 'POST',
+          body: JSON.stringify({ token: uploadToken, data: base64Data }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`NUI chunk callback failed: ${response.status}`);
+        }
+      },
+
+      async close() {
+        await fetch(finalizeCallbackUrl, {
+          method: 'POST',
+          body: JSON.stringify({ token: uploadToken }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    });
   }
 
   async stop() {
