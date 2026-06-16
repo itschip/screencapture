@@ -33,6 +33,19 @@ export function createRegularUploadData(
   };
 }
 
+// ── Live relay (startVideoStream) ────────────────────────────────────────────
+// A relay stream forwards MSE-appendable segments to onSegment as they are
+// produced instead of assembling a file on disk.
+export type StreamSegment = {
+  captureId: string;
+  source: number;
+  type: 'init' | 'media'; // 'init' = header/Tracks (append once); 'media' = one Cluster
+  seq: number; // monotonic per stream
+  data: string; // base64 of the WebM bytes
+};
+
+export type StreamSegmentFn = (segment: StreamSegment) => void;
+
 export interface StreamUploadData {
   captureId: string;
   token: string;
@@ -46,6 +59,14 @@ export interface StreamUploadData {
   startedAt: number;
   duration?: number;
   legacyCallback?: boolean;
+
+  // Live relay mode.
+  relay?: boolean;
+  onSegment?: StreamSegmentFn;
+  // Runtime framing state (relay only) — see webm-stream.ts.
+  pending?: Buffer;
+  initSent?: boolean;
+  segSeq?: number;
 }
 
 export type VideoCaptureResult = {
@@ -79,6 +100,9 @@ export type AddStreamParams = {
   remoteConfig?: StreamRemoteConfig;
   duration?: number;
   legacyCallback?: boolean;
+  // Live relay mode.
+  relay?: boolean;
+  onSegment?: StreamSegmentFn;
 };
 
 export interface RemoteConfig {
@@ -99,6 +123,9 @@ export interface CaptureOptions {
   maxWidth?: number;
   maxHeight?: number;
   duration?: number;
+  // Live relay: WebM output chunk size (bytes) — smaller = lower latency. Passed
+  // through to the NUI; defaults to 800 KiB there when omitted.
+  streamChunkSize?: number;
 }
 
 export type CallbackFn = (data: unknown, _playerSource?: number, correlationId?: string) => void;
