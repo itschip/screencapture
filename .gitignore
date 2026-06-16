@@ -4,3 +4,6 @@ dist
 .idea
 router-local.ts
 tmp
+game/.turbo
+game/node_modules
+game/dist

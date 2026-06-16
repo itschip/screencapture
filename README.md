@@ -159,7 +159,7 @@ const captureId = exports.screencapture.startVideoCapture(
 
 ### `stopVideoCapture` — server-side export
 
-Stops an active recording by `captureId`. This triggers `output.finalize()` in the NUI, flushes remaining encoded frames, and fires the callback registered by `startVideoCapture` or `startVideoCaptureUpload`.
+Stops an active recording by `captureId`. This triggers `output.finalize()` in the NUI, flushes remaining encoded frames, and fires the callback registered by `startVideoCapture`, `startVideoCaptureUpload`, or `startVideoStream`.
 
 | Parameter   | Type     | Description              |
 | ----------- | -------- | ------------------------ |
@@ -213,6 +213,73 @@ local captureId = exports.screencapture:startVideoCaptureUpload(source, 'https:/
     print(result.response.data.url)
 end)
 ```
+
+---
+
+### `startVideoStream` — server-side export
+
+Starts a **continuous** video capture and relays the live WebM stream to your `onSegment` callback as MSE-appendable segments — one `init` segment followed by one `media` segment per WebM Cluster — instead of assembling a file. Nothing is written to disk. Pair it with [MediaSource Extensions](https://developer.mozilla.org/docs/Web/API/Media_Source_Extensions_API) on the receiving end for gap-free, low-latency live playback. Returns a `captureId`; stop it with `stopVideoCapture` (or pass `duration`).
+
+| Parameter   | Type       | Description                                            |
+| ----------- | ---------- | ------------------------------------------------------ |
+| `source`    | `number`   | Player source to record                                |
+| `options`   | `object`   | Capture options (see below)                            |
+| `onSegment` | `function` | Called for every segment as it is produced             |
+| `callback`  | `function` | Optional. Called with the result when the stream ends  |
+
+#### Options
+
+| Field             | Type     | Default  | Description                                                               |
+| ----------------- | -------- | -------- | ------------------------------------------------------------------------- |
+| `duration`        | `number` |          | Optional recording duration in seconds                                    |
+| `maxWidth`        | `number` | `1920`   | Maximum capture width in pixels                                           |
+| `maxHeight`       | `number` | `1080`   | Maximum capture height in pixels                                          |
+| `streamChunkSize` | `number` | `819200` | WebM output chunk size in bytes — smaller = lower latency, more requests  |
+
+Each `onSegment` call receives an object:
+
+| Field       | Type                  | Description                                                      |
+| ----------- | --------------------- | --------------------------------------------------------------- |
+| `captureId` | `string`              | The capture this segment belongs to                             |
+| `source`    | `number`              | Player source                                                   |
+| `type`      | `'init'` \| `'media'` | `'init'` = header/Tracks (append once); `'media'` = one Cluster |
+| `seq`       | `number`              | Monotonic sequence number per stream                            |
+| `data`      | `string`              | Base64 of the WebM bytes                                        |
+
+```lua
+local captureId = exports.screencapture:startVideoStream(source, {
+    maxWidth = 1280,
+    maxHeight = 720,
+    streamChunkSize = 48 * 1024,
+}, function(segment)
+    -- segment.type == 'init'  → append once into an MSE SourceBuffer
+    -- segment.type == 'media' → append in seq order (one WebM Cluster)
+    -- segment.data is base64-encoded WebM
+    relayToViewers(segment)
+end, function(result)
+    print(('Stream %s ended (%d bytes)'):format(result.captureId, result.bytesReceived or 0))
+end)
+
+-- Stop later.
+exports.screencapture:stopVideoCapture(captureId)
+```
+
+```ts
+const captureId = exports.screencapture.startVideoStream(
+  source,
+  { maxWidth: 1280, maxHeight: 720, streamChunkSize: 48 * 1024 },
+  (segment: { captureId: string; source: number; type: 'init' | 'media'; seq: number; data: string }) => {
+    // 'init' → append once into an MSE SourceBuffer; 'media' → append in seq order.
+    // segment.data is base64-encoded WebM.
+    relayToViewers(segment);
+  },
+  (result: any) => {
+    console.log(`Stream ${result.captureId} ended`);
+  },
+);
+```
+
+> Late joiners need the cached `init` segment re-sent before live `media` segments; the receiver is responsible for caching/forwarding them.
 
 ---
 

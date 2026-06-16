@@ -12,6 +12,7 @@ import fetch from 'node-fetch';
 import { StreamRemoteConfig, StreamUploadData, VideoCaptureResult } from './types';
 import { UploadStore } from './upload-store';
 import { processUpload } from './process-upload';
+import { feedStream, flushStream } from './webm-stream';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -81,9 +82,14 @@ export async function createServer(uploadStore: UploadStore) {
     try {
       const streamData = uploadStore.getStream(token);
       const chunk = await readRawBody(ctx.req);
-
-      await appendFile(streamData.tempFilePath, chunk);
       streamData.bytesReceived += chunk.length;
+
+      // Relay streams forward MSE segments live; non-relay streams assemble on disk.
+      if (streamData.relay) {
+        feedStream(streamData, chunk);
+      } else {
+        await appendFile(streamData.tempFilePath, chunk);
+      }
 
       ctx.status = 200;
       ctx.body = { ok: true };
@@ -119,6 +125,13 @@ export async function createServer(uploadStore: UploadStore) {
 
 export async function finalizeStream(streamData: StreamUploadData): Promise<void> {
   const elapsedSeconds = Math.round((Date.now() - streamData.startedAt) / 1000);
+
+  // Relay streams: flush the trailing Cluster, never touch disk.
+  if (streamData.relay) {
+    flushStream(streamData);
+    streamData.callback(createVideoCaptureResult(streamData, { duration: elapsedSeconds }));
+    return;
+  }
 
   if (streamData.isRemote) {
     let videoBuffer: Buffer;

@@ -3,6 +3,7 @@ import { base64ToBuffer } from './process-upload';
 import { appendFile } from 'node:fs/promises';
 import { finalizeStream } from './koa-router';
 import { getEventContext } from './context';
+import { feedStream } from './webm-stream';
 
 type StreamAck = {
   ok: boolean;
@@ -26,9 +27,15 @@ export function registerStreamHandlers() {
     try {
       const streamData = uploadStore.getStream(token);
       const chunk = base64ToBuffer(base64Data);
-
-      await appendFile(streamData.tempFilePath, chunk);
       streamData.bytesReceived += chunk.length;
+
+      // Relay streams forward MSE segments live; non-relay streams assemble on disk.
+      if (streamData.relay) {
+        feedStream(streamData, chunk);
+      } else {
+        await appendFile(streamData.tempFilePath, chunk);
+      }
+
       sendAck(responseEvent, ctx.source, { ok: true });
     } catch (err) {
       console.error('[screencapture] stream-chunk-nui error:', err);

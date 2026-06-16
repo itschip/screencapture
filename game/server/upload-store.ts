@@ -33,6 +33,12 @@ export class UploadStore {
       startedAt: Date.now(),
       duration: params.duration,
       legacyCallback: params.legacyCallback,
+      // Live relay mode + framing state (used only when relay === true).
+      relay: params.relay ?? false,
+      onSegment: params.onSegment,
+      pending: Buffer.alloc(0),
+      initSent: false,
+      segSeq: 0,
     });
 
     this.#tokenToCaptureId.set(streamToken, params.captureId);

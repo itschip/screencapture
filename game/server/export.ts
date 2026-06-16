@@ -8,6 +8,7 @@ import {
   DataType,
   ScreenshotBasicCallbackFn,
   StreamRemoteConfig,
+  StreamSegmentFn,
   createScreenshotBasicUploadData,
   createRegularUploadData,
 } from './types';
@@ -109,8 +110,45 @@ function startVideoCaptureUpload(
   return captureId;
 }
 
+// Live relay: starts a continuous capture and forwards MSE-appendable WebM segments
+// (one 'init' + one 'media' per Cluster) to onSegment as they are produced. Nothing
+// is written to disk. Use with MediaSource on the receiving end for gap-free playback.
+// Stop with stopVideoCapture(captureId) (or pass options.duration). onSegment fires
+// frequently — keep it cheap. options.streamChunkSize (bytes) trades latency vs.
+// overhead (smaller = lower latency; default 800 KiB).
+function startVideoStream(
+  source: number,
+  options: CaptureOptions = {},
+  onSegment: StreamSegmentFn,
+  callback: CallbackFn = () => {},
+): string | undefined {
+  if (typeof onSegment !== 'function') {
+    console.error('[screencapture] onSegment callback is required for startVideoStream');
+    return;
+  }
+  if (!validateStreamRequest(source, options, 'startVideoStream')) return;
+
+  const captureId = nanoid(24);
+  console.log(`[screencapture] Starting video stream for source ${source} with capture ID ${captureId}`);
+
+  const token = uploadStore.addStream({
+    captureId,
+    source,
+    tempDir,
+    callback,
+    duration: options.duration,
+    relay: true,
+    onSegment,
+  });
+
+  emitNet('screencapture:captureStream', source, token, options, captureId);
+
+  return captureId;
+}
+
 global.exports('startVideoCapture', startVideoCapture);
 global.exports('startVideoCaptureUpload', startVideoCaptureUpload);
+global.exports('startVideoStream', startVideoStream);
 global.exports('serverCaptureStream', (source: number, options: CaptureOptions, callback: CallbackFn, duration?: number) => {
   return startVideoCapture(source, normalizeStreamOptions(options ?? {}, duration), callback ?? (() => {}), true);
 });
@@ -156,9 +194,9 @@ global.exports('INTERNAL_stopServerCaptureStream', (source: number) => {
   emitNet('screencapture:INTERNAL:stopCaptureStream', source, captureId);
 });
 
-global.exports('stopStream', (source: number) => {  
+global.exports('stopStream', (source: number) => {
   const captureId = uploadStore.getCaptureIdBySource(source);
-  emitNet('screencapture:INTERNAL:stopCaptureStream', source, captureId); 
+  emitNet('screencapture:INTERNAL:stopCaptureStream', source, captureId);
 });
 
 global.exports(

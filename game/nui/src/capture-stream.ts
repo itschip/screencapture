@@ -16,6 +16,8 @@ type CaptureStreamHttpRequest = {
   maxWidth?: number;
   maxHeight?: number;
   duration?: number;
+  // Live relay: WebM output chunk size in bytes (smaller = lower latency).
+  streamChunkSize?: number;
 };
 
 type CaptureStreamNuiRequest = {
@@ -28,6 +30,8 @@ type CaptureStreamNuiRequest = {
   maxWidth?: number;
   maxHeight?: number;
   duration?: number;
+  // Live relay: WebM output chunk size in bytes (smaller = lower latency).
+  streamChunkSize?: number;
 };
 
 type CaptureStreamRequest = CaptureStreamHttpRequest | CaptureStreamNuiRequest;
@@ -134,9 +138,13 @@ export class CaptureStream {
       ? this.createNuiWritableStream(uploadToken, callbackUrl, finalizeCallbackUrl!)
       : this.createHttpWritableStream(uploadToken, serverEndpoint!);
 
+    // Smaller chunkSize lowers live-relay latency (more frequent flushes); falls
+    // back to the 800 KiB default when not provided (e.g. file/upload captures).
+    const chunkSize = request.streamChunkSize && request.streamChunkSize > 0 ? request.streamChunkSize : CHUNK_SIZE;
+
     this.#output = new Output({
       format: new WebMOutputFormat({ appendOnly: true }),
-      target: new StreamTarget(writable, { chunked: true, chunkSize: CHUNK_SIZE }),
+      target: new StreamTarget(writable, { chunked: true, chunkSize }),
     });
 
     this.#mediaStream = this.#canvas.captureStream(30);
