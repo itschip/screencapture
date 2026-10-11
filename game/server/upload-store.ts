@@ -47,6 +47,10 @@ export class UploadStore {
     return uploadToken;
   }
 
+  hasUpload(uploadToken: string): boolean {
+    return this.#uploadMap.has(uploadToken);
+  }
+
   getUpload(uploadToken: string): UploadData {
     const exists = this.#uploadMap.has(uploadToken);
     if (!exists) {
