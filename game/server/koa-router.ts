@@ -14,6 +14,7 @@ import { UploadStore } from './upload-store';
 import { processUpload } from './process-upload';
 import { captureUploadMetric, getUploadMetricHttpStatus } from './metrics';
 import { createUploadHeaders, formatUploadErrorMessage, getUploadHost } from './upload-identity-headers';
+import { getUploadAgent } from './upload-agent';
 
 // Screenshots only; videos go through the stream routes.
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -253,6 +254,7 @@ async function uploadStreamFile(streamData: StreamUploadData, buf: Buffer): Prom
 
   try {
     const response = await fetch(url, {
+      agent: getUploadAgent(),
       method: 'POST',
       headers: {
         ...formData.getHeaders(),

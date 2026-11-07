@@ -7,6 +7,7 @@ import fetch from 'node-fetch';
 import { CaptureOptions, DataType, UploadData } from './types';
 import { captureUploadMetric, getUploadMetricHttpStatus } from './metrics';
 import { createUploadHeaders, formatUploadErrorMessage, getUploadHost } from './upload-identity-headers';
+import { getUploadAgent } from './upload-agent';
 
 export async function processUpload(uploadData: UploadData, imageData: Buffer | string): Promise<void> {
   const {
@@ -98,6 +99,7 @@ export async function uploadFile(
     let response;
     if (body instanceof FormData) {
       response = await fetch(url, {
+        agent: getUploadAgent(),
         method: 'POST',
         headers: {
           ...body.getHeaders(),
@@ -107,6 +109,7 @@ export async function uploadFile(
       });
     } else {
       response = await fetch(url, {
+        agent: getUploadAgent(),
         method: 'POST',
         headers,
         body: body as any,

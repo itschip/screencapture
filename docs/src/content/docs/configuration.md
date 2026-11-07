@@ -32,6 +32,16 @@ stream_bps '5000000'
 
 Increase these values for faster transfer on capable servers. Lower them if captures create network pressure.
 
+## Upload IPv4
+
+For servers with unreliable IPv6 connectivity, force IPv4 for remote screenshot and video uploads in `server.cfg`:
+
+```text
+set screencapture_upload_ipv4 true
+```
+
+The default is `false`, which keeps Node.js address selection. The setting is read for each upload and applies to HTTP and HTTPS upload URLs, including redirects.
+
 ## Upload Identity Headers
 
 Remote screenshot uploads include server identity headers by default: `User-Agent`, `X-Screencapture-Server-Name`, `X-Screencapture-Upload-Host`, and `X-Screencapture-Resource`. These expose the FiveM server name and resource name to the upload provider.

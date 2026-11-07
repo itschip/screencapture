@@ -70,6 +70,8 @@ Captures a screenshot and uploads it directly to a remote URL. The callback rece
 
 Remote uploads include server identity headers by default: `User-Agent`, `X-Screencapture-Server-Name`, `X-Screencapture-Upload-Host`, and `X-Screencapture-Resource`. These expose the FiveM server name and resource name to the upload provider. Set `screencapture_upload_identity_headers false` in your server config to disable them. User-provided `headers` override the defaults.
 
+For servers with unreliable IPv6 connectivity, add `set screencapture_upload_ipv4 true` to `server.cfg` to force IPv4 for remote screenshot and video uploads. The default is `false`, which keeps Node.js address selection. The setting is read for each upload.
+
 ```lua
 exports.screencapture:remoteUpload(source, 'https://api.fivemanage.com/api/v3/file', {
     encoding = 'webp',
