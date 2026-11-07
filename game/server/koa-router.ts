@@ -15,8 +15,15 @@ import { processUpload } from './process-upload';
 import { captureUploadMetric, getUploadMetricHttpStatus } from './metrics';
 import { createUploadHeaders, formatUploadErrorMessage, getUploadHost } from './upload-identity-headers';
 
+// Screenshots only; videos go through the stream routes.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 const upload = multer({
   storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_UPLOAD_BYTES,
+    files: 1,
+  },
 });
 
 declare function GetCurrentResourceName(): string;
@@ -46,7 +53,24 @@ export async function createServer(uploadStore: UploadStore) {
     await next();
   });
 
-  router.post('/upload/:token', upload.single('file') as any, async (ctx) => {
+  // Reject unknown tokens before multer buffers the request body in memory.
+  const requireUploadToken: Koa.Middleware = async (ctx, next) => {
+    if (!uploadStore.hasUpload(ctx.params['token'] as string)) {
+      ctx.status = 401;
+      ctx.body = { status: 'error', message: 'Invalid upload token' };
+      return;
+    }
+
+    try {
+      await next();
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'LIMIT_FILE_SIZE') throw err;
+      ctx.status = 413;
+      ctx.body = { status: 'error', message: 'File too large' };
+    }
+  };
+
+  router.post('/upload/:token', requireUploadToken, upload.single('file') as any, async (ctx) => {
     const token = ctx.params['token'] as string;
     if (!token) {
       ctx.status = 401;
