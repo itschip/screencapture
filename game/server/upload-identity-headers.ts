@@ -43,11 +43,20 @@ export function formatUploadErrorMessage(kind: 'image' | 'video', url: string, e
 }
 
 function getServerName(): string | undefined {
-  const projectName = GetConvar('sv_projectName', '').trim();
+  const projectName = toHeaderValue(GetConvar('sv_projectName', ''));
   if (projectName) return projectName;
 
-  const hostname = GetConvar('sv_hostname', '').trim();
+  const hostname = toHeaderValue(GetConvar('sv_hostname', ''));
   return hostname || undefined;
+}
+
+// Server names often contain emoji or symbols, which Node rejects in header
+// values with ERR_INVALID_CHAR and fails the whole upload.
+function toHeaderValue(value: string): string {
+  return value
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function createUploadHeaders(url: string, headers?: HeadersInit): Record<string, string> {
