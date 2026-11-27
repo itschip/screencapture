@@ -22,5 +22,5 @@ protocol 'nui'
 
 -- bytes per second for nui protocol
 -- change this as you like
-images_bps '1000000'
+images_bps '500000'
 stream_bps '5000000'

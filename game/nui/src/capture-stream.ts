@@ -4,8 +4,9 @@ import { GameMediaSource } from './game-media-source';
 import { Output, WebMOutputFormat, StreamTarget, MediaStreamVideoTrackSource, QUALITY_MEDIUM } from 'mediabunny';
 import type { StreamTargetChunk } from 'mediabunny';
 
-// 1mb fivem constraint
-const CHUNK_SIZE = 800 * 1024;
+const HTTP_CHUNK_SIZE = 800 * 1024;
+// 192 KiB of video becomes 256 KiB after base64 encoding for the latent event.
+const NUI_CHUNK_SIZE = 192 * 1024;
 
 type CaptureStreamHttpRequest = {
   action: CaptureStreamActions;
@@ -105,7 +106,10 @@ export class CaptureStream {
 
       this.#output = new Output({
         format: new WebMOutputFormat({ appendOnly: true }),
-        target: new StreamTarget(writable, { chunked: true, chunkSize: CHUNK_SIZE }),
+        target: new StreamTarget(writable, {
+          chunked: true,
+          chunkSize: callbackUrl ? NUI_CHUNK_SIZE : HTTP_CHUNK_SIZE,
+        }),
       });
 
       this.#mediaStream = await this.#gameMediaSource.start({

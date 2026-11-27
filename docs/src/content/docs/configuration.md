@@ -12,7 +12,7 @@ provide 'screenshot-basic'
 protocol 'nui'
 
 -- bytes per second for latent image and stream transfers
-images_bps '1000000'
+images_bps '500000'
 stream_bps '5000000'
 ```
 
@@ -47,10 +47,12 @@ This controls the player-to-FXServer connection. Remote provider URLs and `scree
 
 | Metadata | Default in manifest | Description |
 | --- | ---: | --- |
-| `images_bps` | `1000000` | Latent event transfer rate for screenshot payloads. |
+| `images_bps` | `500000` | Latent event transfer rate for screenshot payloads. |
 | `stream_bps` | `5000000` | Latent event transfer rate for video chunks. |
 
-Increase these values for faster transfer on capable servers. Lower them if captures create network pressure.
+Lower these values if captures hit FiveM's latent event rate limit.
+
+NUI screenshots use chunks of up to 256 KiB and are capped at 32 MiB including base64 encoding. A partial upload expires after 60 seconds without a new chunk. NUI recordings use 192 KiB chunks before base64 encoding.
 
 ## Upload IPv4
 

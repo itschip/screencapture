@@ -1,6 +1,7 @@
 import { clientCaptureMap, clientUploadTokenMap } from "../bootstrap";
 import { LiveStreamStatus, ScreenshotCreatedBody } from "../types";
 import { uniqueId } from "../event";
+import { IMAGE_CHUNK_BYTES, MAX_IMAGE_UPLOAD_BYTES } from '../../image-upload-limits';
 
 const imagesBps = parseInt(GetResourceMetadata(GetCurrentResourceName(), 'images_bps', 0), 10) || 500000;
 const streamBps = parseInt(GetResourceMetadata(GetCurrentResourceName(), 'stream_bps', 0), 10) || 5000000;
@@ -39,15 +40,18 @@ async function sendStreamChunk(token: string, data: string): Promise<StreamAck> 
 
 // A whole screenshot in one latent event can crash the client with
 // "Latent event packet overflow", so images are sent in acknowledged chunks.
-const imageChunkSize = 256 * 1024;
-
 async function sendImageChunked(kind: 'proxy' | 'capture', token: string, data: string): Promise<void> {
-  const total = Math.ceil(data.length / imageChunkSize);
+  if (data.length > MAX_IMAGE_UPLOAD_BYTES) {
+    console.error('[screencapture] NUI screenshot exceeds the 32 MiB encoded upload limit');
+    return;
+  }
+
+  const total = Math.ceil(data.length / IMAGE_CHUNK_BYTES);
 
   for (let index = 0; index < total; index++) {
     const responseEvent = `screencapture:image-chunk-nui:${uniqueId()}`;
     const response = waitForStreamAck(responseEvent);
-    const chunk = data.slice(index * imageChunkSize, (index + 1) * imageChunkSize);
+    const chunk = data.slice(index * IMAGE_CHUNK_BYTES, (index + 1) * IMAGE_CHUNK_BYTES);
 
     TriggerLatentServerEvent('screencapture:image-chunk-nui', imagesBps, responseEvent, kind, token, index, total, chunk);
 

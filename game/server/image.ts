@@ -4,6 +4,7 @@ import { uploadStore } from './bootstrap';
 import { processUpload, uploadFile, base64ToBuffer } from './process-upload';
 import { emitNetToPlayer } from './net';
 import { getEventContext } from './context';
+import { IMAGE_CHUNK_BYTES, MAX_IMAGE_CHUNKS } from '../image-upload-limits';
 
 type ImageKind = 'proxy' | 'capture';
 
@@ -13,12 +14,10 @@ type PendingImage = {
   total: number;
   received: number;
   chunks: string[];
-  timeout: ReturnType<typeof setTimeout>;
+  timeout?: ReturnType<typeof setTimeout>;
 };
 
-// 128 chunks * 256 KB = 32 MB of base64, far above any real screenshot.
-const maxImageChunks = 128;
-const pendingImageTimeout = 60000;
+const IMAGE_UPLOAD_IDLE_TIMEOUT_MS = 60_000;
 const pendingImages = new Map<string, PendingImage>();
 
 export function registerImageHandlers() {
@@ -122,15 +121,22 @@ export function registerImageHandlers() {
       const ack = (ok: boolean, error?: string) => emitNetToPlayer(responseEvent, source, { ok, error });
 
       if (kind !== 'proxy' && kind !== 'capture') return ack(false, 'Invalid upload kind');
+      if (!uploadStore.hasUpload(token)) return ack(false, 'Unknown or expired upload token');
+      if (!Number.isInteger(total) || total < 1 || total > MAX_IMAGE_CHUNKS) {
+        return ack(false, 'Invalid image chunk count');
+      }
+      if (!Number.isInteger(index) || index < 0 || index >= total || typeof data !== 'string' || data.length === 0) {
+        return ack(false, 'Invalid image chunk');
+      }
+      // The chunk count and byte limit together cap the assembled payload at 32 MiB.
+      if (data.length > IMAGE_CHUNK_BYTES || Buffer.byteLength(data, 'utf8') > IMAGE_CHUNK_BYTES) {
+        return ack(false, 'Image chunk exceeds the 256 KiB limit');
+      }
 
       let pending = pendingImages.get(token);
       if (!pending) {
-        if (!uploadStore.hasUpload(token)) return ack(false, 'Unknown upload token');
-
         const owner = uploadStore.getUpload(token).playerSource;
-        if (owner && owner !== source) return ack(false, 'Upload token belongs to another player');
-
-        if (!Number.isInteger(total) || total < 1 || total > maxImageChunks) return ack(false, 'Invalid chunk count');
+        if (owner !== undefined && owner !== source) return ack(false, 'Upload token belongs to another player');
 
         pending = {
           kind,
@@ -138,30 +144,31 @@ export function registerImageHandlers() {
           total,
           received: 0,
           chunks: new Array(total),
-          timeout: setTimeout(() => pendingImages.delete(token), pendingImageTimeout),
         };
-        pendingImages.set(token, pending);
       }
 
       if (pending.source !== source || pending.kind !== kind || pending.total !== total) {
         return ack(false, 'Chunk does not match upload');
       }
 
-      if (!Number.isInteger(index) || index < 0 || index >= total || typeof data !== 'string') {
-        return ack(false, 'Invalid chunk');
-      }
+      if (pending.chunks[index] !== undefined) return ack(true);
 
-      if (pending.chunks[index] === undefined) {
-        pending.chunks[index] = data;
-        pending.received++;
-      }
-
-      ack(true);
-
-      if (pending.received < pending.total) return;
-
+      pending.chunks[index] = data;
+      pending.received++;
       clearTimeout(pending.timeout);
+
+      if (pending.received < pending.total) {
+        pending.timeout = setTimeout(() => {
+          pendingImages.delete(token);
+          uploadStore.removeUpload(token);
+          console.warn(`[screencapture] NUI screenshot upload timed out for player ${source}`);
+        }, IMAGE_UPLOAD_IDLE_TIMEOUT_MS);
+        pendingImages.set(token, pending);
+        return ack(true);
+      }
+
       pendingImages.delete(token);
+      ack(true);
 
       const base64Data = pending.chunks.join('');
       if (kind === 'proxy') {
