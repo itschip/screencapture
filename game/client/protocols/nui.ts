@@ -37,6 +37,28 @@ async function sendStreamChunk(token: string, data: string): Promise<StreamAck> 
   return response;
 }
 
+// A whole screenshot in one latent event can crash the client with
+// "Latent event packet overflow", so images are sent in acknowledged chunks.
+const imageChunkSize = 256 * 1024;
+
+async function sendImageChunked(kind: 'proxy' | 'capture', token: string, data: string): Promise<void> {
+  const total = Math.ceil(data.length / imageChunkSize);
+
+  for (let index = 0; index < total; index++) {
+    const responseEvent = `screencapture:image-chunk-nui:${uniqueId()}`;
+    const response = waitForStreamAck(responseEvent);
+    const chunk = data.slice(index * imageChunkSize, (index + 1) * imageChunkSize);
+
+    TriggerLatentServerEvent('screencapture:image-chunk-nui', imagesBps, responseEvent, kind, token, index, total, chunk);
+
+    const ack = await response;
+    if (!ack.ok) {
+      console.error(`[screencapture] image chunk ${index + 1}/${total} failed: ${ack.error}`);
+      return;
+    }
+  }
+}
+
 async function finalizeStream(token: string): Promise<StreamAck> {
   const responseEvent = `screencapture:stream-finalize-nui:${uniqueId()}`;
   const response = waitForStreamAck(responseEvent);
@@ -65,7 +87,7 @@ on('__cfx_nui:screenshot_upload_proxy', (body: any, cb: (arg: any) => void) => {
   if (body.id !== undefined && clientUploadTokenMap.has(body.id)) {
     const token = clientUploadTokenMap.get(body.id);
     if (token && body.data) {
-      TriggerLatentServerEvent('screencapture:PerformUploadProxy', imagesBps, token, body.data);
+      sendImageChunked('proxy', token, body.data);
     }
     clientUploadTokenMap.delete(body.id);
   }
@@ -75,8 +97,8 @@ on('__cfx_nui:capture_screen', (body: any, cb: (arg: any) => void) => {
     cb(true);
 
     const token = body.uploadToken
-    if (token) {
-        TriggerLatentServerEvent('screencapture:capture-screen', imagesBps, token, body.data);
+    if (token && body.data) {
+        sendImageChunked('capture', token, body.data);
     }
 });
 
