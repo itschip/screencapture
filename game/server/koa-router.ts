@@ -79,9 +79,6 @@ export async function createServer(uploadStore: UploadStore) {
       return;
     }
 
-    ctx.response.append('Access-Control-Allow-Origin', '*');
-    ctx.response.append('Access-Control-Allow-Methods', 'GET, POST');
-
     const file = ctx.file;
     if (!file) {
       ctx.status = 400;

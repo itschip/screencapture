@@ -2,6 +2,33 @@
 
 A FiveM resource for capturing screenshots and recording videos from a player's game view, built as a modern replacement for screenshot-basic.
 
+## Capture transport
+
+The resource uses `fx_version 'cerulean'` and defaults to `protocol 'nui'`. Screenshots and recorded-video chunks use HTTPS NUI callbacks and latent server events, so the default transport needs no public upload endpoint.
+
+To send captures directly to FXServer through an HTTPS reverse proxy, change the transport in `fxmanifest.lua`:
+
+```lua
+protocol 'https'
+```
+
+Then configure the public FXServer base URL in `server.cfg`, before starting screencapture:
+
+```cfg
+setr screencapture_https_endpoint "https://capture.example.com"
+ensure screencapture
+```
+
+Use **`setr`**, so clients can read the convar. Its default is empty, and it is only used for the direct HTTPS transport. The setting is read for each capture; restart the resource after changing the manifest protocol.
+
+The resource appends its current name and route to this base URL. For a resource named `screencapture`, configure the proxy to forward `https://capture.example.com/screencapture/*` to `http://127.0.0.1:30120/screencapture/*` (adjust the FXServer address and port). This covers screenshot uploads, recorded-video chunks, and recording finalization. The proxy must accept POST requests and CORS preflights, preserve the resource path, and allow the required upload sizes. HTTPS needs a certificate trusted by players' clients.
+
+A path prefix is supported: `https://example.com/fivem` produces routes under `/fivem/screencapture/`; the proxy must strip `/fivem` before forwarding to FXServer. Do not include the resource name, credentials, a query string, or a fragment in the convar value. Clients can see this URL.
+
+The legacy `protocol 'http'` value is accepted as an alias for the direct transport, but it now also requires `screencapture_https_endpoint` with an HTTPS URL. Missing or invalid configuration logs an error and prevents the direct capture request; the resource no longer constructs an insecure URL from the server IP.
+
+This setting controls **player-to-FXServer** uploads, including `requestScreenshotUpload` compatibility calls. The remote provider URL and the server-side `screencapture_upload_ipv4` option independently control **FXServer-to-provider** uploads. Local `requestScreenshot` calls continue to use NUI callbacks.
+
 ---
 
 ## Screenshots

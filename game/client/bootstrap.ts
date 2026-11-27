@@ -1,4 +1,3 @@
-import { request } from 'http';
 import { netEventController } from './event';
 import { CaptureRequest, LiveStreamClientRequest, RequestScreenshotUploadCB } from './types';
 import { exportHandler, uuidv4 } from './utils';
@@ -15,8 +14,27 @@ RegisterNuiCallbackType('capture_stream_chunk');
 RegisterNuiCallbackType('capture_stream_finalize');
 RegisterNuiCallbackType('live_stream_status');
 
-const protocol = GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'http';
-const serverEndpoint = `http://${GetCurrentServerEndpoint()}/${GetCurrentResourceName()}`;
+const protocol = (GetResourceMetadata(GetCurrentResourceName(), 'protocol', 0) || 'nui').trim().toLowerCase();
+
+function getServerEndpoint(): string | undefined {
+  // Keep the old 'http' transport name as an alias, but require HTTPS under cerulean.
+  if (protocol !== 'https' && protocol !== 'http') {
+    console.error(`[screencapture] Unsupported capture protocol '${protocol}'. Use 'nui' or 'https'.`);
+    return;
+  }
+
+  const endpoint = GetConvar('screencapture_https_endpoint', '').trim().replace(/\/+$/, '');
+  // Keep validation independent of browser APIs in the client runtime. Accept an
+  // HTTPS base URL, without credentials, a query, a fragment, or backslashes.
+  if (!/^https:\/\/[^/?#\\\s@]+(?:\/[^?#\\\s]*)?$/i.test(endpoint)) {
+    console.error(
+      '[screencapture] HTTPS capture requires a public HTTPS base URL. Configure setr screencapture_https_endpoint "https://capture.example.com" in server.cfg.',
+    );
+    return;
+  }
+
+  return `${endpoint}/${GetCurrentResourceName()}`;
+}
 
 onNet('screencapture:captureScreen', (token: string, options: object, dataType: string) => {
   if (protocol === 'nui') {
@@ -29,11 +47,15 @@ onNet('screencapture:captureScreen', (token: string, options: object, dataType: 
     });
   }
 
+  const serverEndpoint = getServerEndpoint();
+  if (!serverEndpoint) return;
+
   SendNUIMessage({
     ...options,
     uploadToken: token,
     dataType,
     action: 'capture',
+    callbackUrl: undefined,
     serverEndpoint: `${serverEndpoint}/upload`,
   });
 });
@@ -58,6 +80,9 @@ async function requestScreenshotUpload(
     : ({ headers: {}, encoding: 'webp' } as CaptureRequest);
   const realCallback = isOptions ? (callback as RequestScreenshotUploadCB) : (optionsOrCB as RequestScreenshotUploadCB);
 
+  const serverEndpoint = protocol === 'nui' ? undefined : getServerEndpoint();
+  if (protocol !== 'nui' && !serverEndpoint) return;
+
   const correlationId = uuidv4();
   clientCaptureMap.set(correlationId, realCallback);
 
@@ -72,7 +97,7 @@ async function requestScreenshotUpload(
     return console.error('Failed to get upload token');
   }
 
-  clientUploadTokenMap.set(correlationId, token);
+  if (!serverEndpoint) clientUploadTokenMap.set(correlationId, token);
 
   return createImageCaptureMessage({
     ...realOptions,
@@ -81,8 +106,8 @@ async function requestScreenshotUpload(
     uploadToken: token,
     dataType: 'base64',
     correlationId,
-    // since this goes through the nui proxy, this will stay like this.
-    callbackUrl: `https://${GetCurrentResourceName()}/screenshot_upload_proxy`,
+    serverEndpoint: serverEndpoint ? `${serverEndpoint}/upload` : undefined,
+    callbackUrl: serverEndpoint ? undefined : `https://${GetCurrentResourceName()}/screenshot_upload_proxy`,
   });
 }
 
@@ -132,7 +157,6 @@ function createImageCaptureMessage(options: CaptureRequest) {
   SendNUIMessage({
     ...options,
     action: 'capture',
-    ...(protocol === 'http' && { serverEndpoint: `${serverEndpoint}/upload` }),
   });
 }
 
@@ -148,11 +172,16 @@ onNet('screencapture:captureStream', (token: string, options: object, captureId?
     });
   }
 
+  const serverEndpoint = getServerEndpoint();
+  if (!serverEndpoint) return;
+
   SendNUIMessage({
     ...options,
     captureId,
     uploadToken: token,
     action: 'capture-stream-start',
+    callbackUrl: undefined,
+    finalizeCallbackUrl: undefined,
     serverEndpoint: serverEndpoint,
   });
 });
