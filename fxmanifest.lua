@@ -1,4 +1,4 @@
-fx_version 'bodacious'
+fx_version 'cerulean'
 
 version '0.17.2'
 
@@ -17,8 +17,8 @@ files {
 
 provide 'screenshot-basic'
 
--- use 'nui' if you're having trouble with uploads
-protocol 'http'
+-- use 'https' with the replicated screencapture_https_endpoint convar for a reverse proxy
+protocol 'nui'
 
 -- bytes per second for nui protocol
 -- change this as you like

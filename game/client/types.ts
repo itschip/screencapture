@@ -10,7 +10,7 @@ export type CaptureRequest = {
   quality: number;
   headers: Headers;
   uploadToken: string;
-  serverEndpoint: string;
+  serverEndpoint?: string;
   // only used for screenshot-basic requestScreenshot export
   callbackUrl?: string;
   filename: string;
